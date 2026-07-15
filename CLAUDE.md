@@ -1,6 +1,8 @@
 # MecchaChameleon — mobile MECCHA CHAMELEON-like (hide-paint-find PvP)
 
 Unity 6000.0.77f1 · URP · Input System · portrait mobile (1080×1920 reference).
+GitHub: **https://github.com/tyf9596/duomaomao** (main; Library/ ignored, push after
+each session-worth of work; git user tyf9596, HTTPS via Windows credential manager).
 
 ## Vision (pivoted 2026-07-14, mirrors the Steam hit MECCHA CHAMELEON)
 
@@ -81,8 +83,12 @@ for hiding *within* the hunter's line of sight.
 - Patterned-surface hiding is the design meta (user call 2026-07-15, mirrors the Steam
   game): tiles/stripes/graffiti walls let players paint pattern-matching camo. Bots detect
   patterned ground (two-point sample, colour diff > 0.25) and use `FillStripes` camo.
-- Poses: Stand → Crouch(sit clip) → Statue(static clip) → Lie(static clip + body tipped
-  -90°, procedural). Pose int drives animator; movement input breaks the pose.
+- Poses (6): Stand / Crouch(sit clip) / Statue(static) / Lie(static + body tipped -90°,
+  procedural, offset scales with rig) / Scarecrow(holding-both) / Chair(drive clip).
+  Pose int drives animator; movement input breaks the pose. Touch UI: POSE button opens
+  a 6-option picker strip (PlayerRig `_posePanel`); editor P key cycles.
+  **NOT yet play-verified: pose picker UI + Scarecrow/Chair states (added right before
+  the 2026-07-15 GitHub push) — verify first thing next session.**
 - Character skins are **pure white, no source texture, no eyes** (user call 2026-07-14).
   The Kenney blocky FBX UVs are unusable for painting (mirrored limbs, shared verts, and
   the head is a 10x mesh on a 0.1x bone), so `PaintableBody` REBUILDS UVs at runtime:
