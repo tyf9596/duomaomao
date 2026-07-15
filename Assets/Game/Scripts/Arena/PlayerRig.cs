@@ -1,0 +1,284 @@
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.InputSystem;
+
+/// <summary>
+/// The human player's driver: reads touch (left half = virtual joystick, right half =
+/// camera look, multitouch aware) with a WASD/mouse fallback for the Editor, drives the
+/// CharacterMotor, and owns the on-screen buttons (DASH, JUMP/CLIMB, POSE, and the
+/// context action — PAINT as a hider, SHOOT as a hunter).
+/// </summary>
+public class PlayerRig : MonoBehaviour
+{
+    public Character self;
+    public ThirdPersonCamera cam;
+    public MatchManager match;
+
+    // touch bookkeeping
+    int _moveTouchId = -1;
+    int _lookTouchId = -1;
+    Vector2 _moveOrigin;
+    Vector2 _stick;
+    bool _mouseLook;
+
+    // UI
+    GameObject _controlsRoot;
+    RectTransform _stickKnob;
+    HoldButton _jumpHold;
+    Text _actionLabel;
+    Image _actionBg;
+    GameObject _crosshair;
+    GameObject _posePanel;
+    SelfPaintMode _paint;
+
+    void TogglePosePanel()
+    {
+        if (_posePanel != null) _posePanel.SetActive(!_posePanel.activeSelf);
+    }
+
+    public void Setup(Character character, ThirdPersonCamera camera, MatchManager matchManager)
+    {
+        self = character;
+        cam = camera;
+        match = matchManager;
+        BuildControls();
+        SetTeam(self.team);
+    }
+
+    public void SetTeam(Team team)
+    {
+        if (_paint != null && _paint.Active) _paint.Exit();
+        if (_actionLabel != null) _actionLabel.text = team == Team.Hunter ? "SHOOT" : "PAINT";
+        if (_actionBg != null) _actionBg.color = team == Team.Hunter ? new Color(0.75f, 0.22f, 0.18f, 0.85f) : new Color(0.24f, 0.5f, 0.75f, 0.85f);
+        if (_crosshair != null) _crosshair.SetActive(team == Team.Hunter);
+        SetFirstPerson(team == Team.Hunter); // hunters aim like a normal FPS
+    }
+
+    void SetFirstPerson(bool on)
+    {
+        if (cam != null) cam.firstPerson = on;
+        if (self != null)
+        {
+            self.motor.faceLocked = on;
+            // hide our own body so it doesn't block the first-person view
+            foreach (var r in self.GetComponentsInChildren<Renderer>(true))
+                r.enabled = !on;
+        }
+        _firstPerson = on;
+    }
+    bool _firstPerson;
+
+    public void SetControlsVisible(bool visible)
+    {
+        if (_controlsRoot != null) _controlsRoot.SetActive(visible);
+    }
+
+    void Update()
+    {
+        if (self == null || cam == null) return;
+
+        bool painting = _paint != null && _paint.Active;
+        if (!painting)
+        {
+            ReadTouch();
+            ReadEditorFallback();
+            DriveMotor();
+            // FPS: the body always faces the camera so shots and model agree
+            if (_firstPerson)
+                self.transform.rotation = Quaternion.Euler(0f, cam.yaw, 0f);
+        }
+
+        // editor hotkeys that work in any mode
+        var kb = Keyboard.current;
+        if (kb != null && kb.fKey.wasPressedThisFrame) OnAction();
+    }
+
+    void ReadTouch()
+    {
+        var ts = Touchscreen.current;
+        if (ts == null) return;
+
+        var touches = ts.touches;
+        for (int i = 0; i < touches.Count; i++)
+        {
+            var t = touches[i];
+            int id = t.touchId.ReadValue();
+            Vector2 pos = t.position.ReadValue();
+
+            if (t.press.wasPressedThisFrame)
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                bool overUI = es != null && es.IsPointerOverGameObject(id);
+                if (!overUI)
+                {
+                    if (pos.x < Screen.width * 0.45f && _moveTouchId < 0)
+                    {
+                        _moveTouchId = id;
+                        _moveOrigin = pos;
+                    }
+                    else if (_lookTouchId < 0)
+                    {
+                        _lookTouchId = id;
+                    }
+                }
+            }
+
+            if (t.press.isPressed)
+            {
+                if (id == _moveTouchId)
+                {
+                    float radius = Screen.width * 0.11f;
+                    _stick = Vector2.ClampMagnitude((pos - _moveOrigin) / radius, 1f);
+                }
+                else if (id == _lookTouchId)
+                {
+                    cam.AddLook(t.delta.ReadValue());
+                }
+            }
+
+            if (t.press.wasReleasedThisFrame)
+            {
+                if (id == _moveTouchId) { _moveTouchId = -1; _stick = Vector2.zero; }
+                if (id == _lookTouchId) _lookTouchId = -1;
+            }
+        }
+    }
+
+    void ReadEditorFallback()
+    {
+        // Keyboard move (only when no joystick touch active)
+        var kb = Keyboard.current;
+        if (kb != null && _moveTouchId < 0)
+        {
+            Vector2 k = Vector2.zero;
+            if (kb.wKey.isPressed) k.y += 1f;
+            if (kb.sKey.isPressed) k.y -= 1f;
+            if (kb.dKey.isPressed) k.x += 1f;
+            if (kb.aKey.isPressed) k.x -= 1f;
+            if (k != Vector2.zero) _stick = k.normalized;
+            else if (_moveTouchId < 0) _stick = Vector2.Lerp(_stick, Vector2.zero, 20f * Time.deltaTime);
+
+            if (kb.leftShiftKey.wasPressedThisFrame) self.motor.wantDash = true;
+            if (kb.spaceKey.wasPressedThisFrame) self.motor.wantJumpPressed = true;
+            if (kb.pKey.wasPressedThisFrame) self.motor.CyclePose();
+        }
+
+        // Mouse look: drag with LMB held (gesture must start off-UI)
+        var mouse = Mouse.current;
+        if (mouse != null && _lookTouchId < 0)
+        {
+            if (mouse.leftButton.wasPressedThisFrame) _mouseLook = !UiGuard.IsPointerOverUI();
+            if (!mouse.leftButton.isPressed) _mouseLook = false;
+            if (_mouseLook) cam.AddLook(mouse.delta.ReadValue());
+        }
+    }
+
+    void DriveMotor()
+    {
+        var motor = self.motor;
+        Vector3 f = cam.FlatForward();
+        Vector3 r = new Vector3(f.z, 0f, -f.x);
+        motor.desiredMove = f * _stick.y + r * _stick.x;
+        bool jumpHeld = _jumpHold != null && _jumpHold.Held;
+        var kb = Keyboard.current;
+        if (kb != null && kb.spaceKey.isPressed) jumpHeld = true;
+        motor.wantJumpHold = jumpHeld;
+
+        // joystick knob visual
+        if (_stickKnob != null) _stickKnob.anchoredPosition = _stick * 95f;
+    }
+
+    void OnAction()
+    {
+        if (self.team == Team.Hider)
+        {
+            if (match != null && match.Phase != MatchPhase.Hide && match.Phase != MatchPhase.Seek) return;
+            if (_paint == null)
+            {
+                _paint = gameObject.AddComponent<SelfPaintMode>();
+                _paint.Init(self, cam, this);
+            }
+            _paint.Toggle();
+        }
+        else
+        {
+            if (match == null || match.Phase != MatchPhase.Seek) return;
+            var gun = GetComponent<Shotgun>();
+            if (gun == null || !gun.CanFire) return;
+            self.motor.TriggerShoot();
+            // fire from the camera so the crosshair is exactly the impact point (FPS style)
+            var victim = gun.Fire(cam.transform.position, cam.transform.forward, self);
+            if (victim != null) match.Convert(victim);
+        }
+    }
+
+    void BuildControls()
+    {
+        PaintUI.EnsureEventSystem();
+        var canvas = UiKit.MakeCanvas("Controls", 40, transform);
+        _controlsRoot = canvas.gameObject;
+        Transform root = canvas.transform;
+
+        // Joystick visual (fixed bottom-left; input origin is wherever the touch lands)
+        var stickBg = new GameObject("Stick", typeof(Image));
+        stickBg.transform.SetParent(root, false);
+        var bgImg = stickBg.GetComponent<Image>();
+        bgImg.sprite = UiKit.CircleSprite;
+        bgImg.color = new Color(1f, 1f, 1f, 0.14f);
+        bgImg.raycastTarget = false;
+        UiKit.SetRect((RectTransform)stickBg.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(0.5f, 0.5f), new Vector2(250, 320), new Vector2(320, 320));
+
+        var knob = new GameObject("Knob", typeof(Image));
+        knob.transform.SetParent(stickBg.transform, false);
+        var knobImg = knob.GetComponent<Image>();
+        knobImg.sprite = UiKit.CircleSprite;
+        knobImg.color = new Color(1f, 1f, 1f, 0.35f);
+        knobImg.raycastTarget = false;
+        UiKit.SetRect((RectTransform)knob.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(130, 130));
+        _stickKnob = (RectTransform)knob.transform;
+
+        // Buttons bottom-right
+        var jump = UiKit.MakeButton(root, "JUMP", new Color(0.25f, 0.25f, 0.3f, 0.85f), Color.white, 40, round: true);
+        UiKit.SetRect((RectTransform)jump.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-160, 250), new Vector2(210, 210));
+        _jumpHold = jump.gameObject.AddComponent<HoldButton>();
+        _jumpHold.onDown = () => { self.motor.wantJumpPressed = true; };
+
+        var dash = UiKit.MakeButton(root, "DASH", new Color(0.25f, 0.25f, 0.3f, 0.85f), Color.white, 40, round: true);
+        UiKit.SetRect((RectTransform)dash.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-390, 320), new Vector2(180, 180));
+        dash.onClick.AddListener(() => { self.motor.wantDash = true; });
+
+        var pose = UiKit.MakeButton(root, "POSE", new Color(0.25f, 0.25f, 0.3f, 0.85f), Color.white, 40, round: true);
+        UiKit.SetRect((RectTransform)pose.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-160, 500), new Vector2(180, 180));
+        pose.onClick.AddListener(TogglePosePanel);
+
+        // pose picker: a strip of options above the POSE button
+        _posePanel = new GameObject("PosePanel", typeof(RectTransform));
+        _posePanel.transform.SetParent(root, false);
+        UiKit.SetRect((RectTransform)_posePanel.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(-160, 610), new Vector2(240, 520));
+        string[] poseNames = { "STAND", "CROUCH", "STATUE", "LIE", "ARMS", "SIT" };
+        for (int i = 0; i < poseNames.Length; i++)
+        {
+            Pose p = (Pose)i;
+            var pb = UiKit.MakeButton(_posePanel.transform, poseNames[i], new Color(0.18f, 0.18f, 0.22f, 0.92f), Color.white, 34);
+            UiKit.SetRect((RectTransform)pb.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, i * 84f), new Vector2(230, 76));
+            pb.onClick.AddListener(() =>
+            {
+                self.motor.SetPose(p);
+                _posePanel.SetActive(false);
+            });
+        }
+        _posePanel.SetActive(false);
+
+        var action = UiKit.MakeButton(root, "PAINT", new Color(0.24f, 0.5f, 0.75f, 0.85f), Color.white, 46, round: true);
+        UiKit.SetRect((RectTransform)action.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-400, 560), new Vector2(230, 230));
+        action.onClick.AddListener(OnAction);
+        _actionBg = action.GetComponent<Image>();
+        _actionLabel = action.GetComponentInChildren<Text>();
+
+        // Hunter crosshair
+        var cross = UiKit.MakeText(root, "+", 72, TextAnchor.MiddleCenter);
+        UiKit.SetRect(cross.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(100, 100));
+        _crosshair = cross.gameObject;
+        _crosshair.SetActive(false);
+    }
+}
