@@ -15,6 +15,7 @@ public class BotBrain : MonoBehaviour
     public MatchManager match;
     public ArenaMap map;
     public LobbyRoom lobby; // where we mill about before the match (and hunters wait)
+    public bool lobbyVolunteer; // wants to hunt → stands on the red pad
     public Shotgun gun; // set when on the hunter team
 
     [Header("Hunting")]
@@ -50,7 +51,7 @@ public class BotBrain : MonoBehaviour
                 break;
             case MatchPhase.Seek:
                 if (self.team == Team.Hunter) HuntBehavior();
-                else Idle(); // stay frozen in camouflage
+                else { Idle(); MaybeTaunt(); } // frozen in camo — but bravado pays
                 break;
             default:
                 Idle();
@@ -66,13 +67,41 @@ public class BotBrain : MonoBehaviour
     // ---------------- lobby ----------------
 
     float _lobbyNextAt;
+    float _lobbyRethinkAt;
     bool _lobbyIdling;
     Vector3 _lobbyTarget;
 
-    /// <summary>Mill about the lobby: short walks, pauses, the odd pose or hop.</summary>
+    /// <summary>Mill about the lobby: short walks, pauses, the odd pose or hop.
+    /// Volunteers head for the hunter pad and stand on it (and sometimes chicken out).</summary>
     void LobbyBehavior()
     {
         if (lobby == null) { Idle(); return; }
+
+        // change of heart, only while volunteering still matters
+        if (match.Phase == MatchPhase.Lobby && Time.time >= _lobbyRethinkAt)
+        {
+            _lobbyRethinkAt = Time.time + Random.Range(5f, 9f);
+            if (Random.value < 0.18f)
+            {
+                lobbyVolunteer = !lobbyVolunteer;
+                _lobbyNextAt = 0f; // re-decide destination now
+            }
+        }
+
+        if (lobbyVolunteer && match.Phase == MatchPhase.Lobby)
+        {
+            if (lobby.OnPlatform(transform.position)) { Idle(); return; }
+            if (Time.time >= _lobbyNextAt)
+            {
+                _lobbyNextAt = Time.time + Random.Range(1.2f, 2.5f);
+                _lobbyTarget = lobby.PlatformSpot();
+            }
+            Vector3 toPad = _lobbyTarget - transform.position;
+            toPad.y = 0f;
+            if (toPad.magnitude < 0.3f) { Idle(); return; }
+            Steer(_lobbyTarget);
+            return;
+        }
 
         if (Time.time >= _lobbyNextAt)
         {
@@ -142,6 +171,31 @@ public class BotBrain : MonoBehaviour
     static float ColorDiff(Color a, Color b)
     {
         return Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
+    }
+
+    // Bot bravado: taunt occasionally once settled, when the hunter is at a spicy
+    // middle distance — earns style points (and shows off the system).
+    float _nextTauntThinkAt;
+
+    void MaybeTaunt()
+    {
+        if (!_settled || Time.time < _nextTauntThinkAt) return;
+        _nextTauntThinkAt = Time.time + Random.Range(5f, 10f);
+        float nearest = float.MaxValue;
+        foreach (var ch in match.Characters)
+            if (ch != null && ch.team == Team.Hunter)
+                nearest = Mathf.Min(nearest, Vector3.Distance(ch.transform.position, transform.position));
+        if (nearest > 8f && nearest < 18f && Random.value < 0.25f)
+            match.DoTaunt(self);
+    }
+
+    /// <summary>Taunts are audible: a hunter that hears one gets suspicious of the noise-maker.</summary>
+    public void HearTaunt(Character who, float strength)
+    {
+        if (self.team != Team.Hunter || who == null || who == self) return;
+        float v;
+        _suspicion.TryGetValue(who, out v);
+        _suspicion[who] = v + strength;
     }
 
     // ---------------- hunter ----------------

@@ -2,7 +2,8 @@ using UnityEngine;
 
 // Stand=idle · Crouch=sit-on-ground clip · Statue=mannequin stance · Lie=plank (procedural)
 // Scarecrow=arms-forward holding stance · Chair=seated driving stance
-public enum Pose { Stand, Crouch, Statue, Lie, Scarecrow, Chair }
+// Ball=sit + procedural hug-your-head bones · Dead=die clip frozen crumpled · Bend=pick-up frozen mid-stoop
+public enum Pose { Stand, Crouch, Statue, Lie, Scarecrow, Chair, Ball, Dead, Bend }
 
 /// <summary>
 /// Input-agnostic character movement: walk, dash, jump, wall-climb and posing.
@@ -125,6 +126,31 @@ public class CharacterMotor : MonoBehaviour
         v.y = 0f;
         anim.SetFloat("Speed", v.magnitude);
         anim.SetInteger("Pose", (int)CurrentPose);
+
+        // Ball: sit clip + procedural hands-on-head (runs after the animator wrote bones;
+        // angles tuned visually 2026-07-16 — arms fold INWARD and meet above the head)
+        if (CurrentPose == Pose.Ball)
+        {
+            CacheBones();
+            if (_head != null) _head.localRotation = _head.localRotation * Quaternion.Euler(45f, 0f, 0f);
+            if (_armL != null) _armL.localRotation = _armL.localRotation * Quaternion.Euler(-165f, 0f, 30f);
+            if (_armR != null) _armR.localRotation = _armR.localRotation * Quaternion.Euler(-165f, 0f, -30f);
+        }
+    }
+
+    Transform _head, _armL, _armR;
+    bool _bonesSearched;
+
+    void CacheBones()
+    {
+        if (_bonesSearched || body == null) return;
+        _bonesSearched = true;
+        foreach (var t in body.GetComponentsInChildren<Transform>())
+        {
+            if (t.name == "head") _head = t;
+            else if (t.name == "arm-left") _armL = t;
+            else if (t.name == "arm-right") _armR = t;
+        }
     }
 
     public void SetAiming(bool on)
@@ -135,6 +161,21 @@ public class CharacterMotor : MonoBehaviour
     public void TriggerShoot()
     {
         if (anim != null) anim.SetTrigger("Shoot");
+    }
+
+    [Header("Taunt")]
+    public float tauntCooldown = 4f;
+    float _tauntReadyAt;
+
+    public bool CanTaunt => Time.time >= _tauntReadyAt;
+
+    /// <summary>Play the taunt emote (points + noise handled by MatchManager.DoTaunt).</summary>
+    public bool Taunt()
+    {
+        if (!CanTaunt) return false;
+        _tauntReadyAt = Time.time + tauntCooldown;
+        if (anim != null) anim.SetTrigger("Taunt");
+        return true;
     }
 
     void ConsumeEdges()
@@ -171,7 +212,7 @@ public class CharacterMotor : MonoBehaviour
     /// <summary>Cycle through all poses (editor P key; the touch UI picks directly).</summary>
     public void CyclePose()
     {
-        SetPose((Pose)(((int)CurrentPose + 1) % 6));
+        SetPose((Pose)(((int)CurrentPose + 1) % 9));
     }
 
     public void SetPose(Pose pose)

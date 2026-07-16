@@ -19,6 +19,7 @@ public class ThirdPersonCamera : MonoBehaviour
     public float eyeHeight = 1.18f;   // first-person eye level on the 1.35m body
     public bool paintMode;
     public bool firstPerson;
+    public Character spectate; // when set, render from this character's eyes (hider watching the hunter)
 
     float _currentDistance;
 
@@ -45,6 +46,16 @@ public class ThirdPersonCamera : MonoBehaviour
 
     void LateUpdate()
     {
+        if (spectate != null)
+        {
+            // ride along behind the spectated character's eyes, following their facing
+            Vector3 fwd = spectate.transform.forward;
+            transform.position = spectate.EyePos - fwd * 0.1f;
+            var want = Quaternion.LookRotation(fwd, Vector3.up);
+            transform.rotation = Quaternion.Slerp(transform.rotation, want, 10f * Time.deltaTime);
+            return;
+        }
+
         if (target == null) return;
 
         if (firstPerson)

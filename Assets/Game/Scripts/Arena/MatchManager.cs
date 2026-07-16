@@ -49,9 +49,17 @@ public class MatchManager : MonoBehaviour
     readonly HashSet<Character> _volunteers = new HashSet<Character>();
     float _phaseEndsAt;
     bool _hunterEntryStarted;
+    float _nextVolCheckAt;
+
+    // style scoring (original-game rule: points for time spent inside the hunter's
+    // line of sight — the closer the richer; taunts add risk-bonus on top)
+    readonly Dictionary<Character, float> _score = new Dictionary<Character, float>();
+    float _nextLosTickAt;
+    float _lastGainAt;
+    static readonly RaycastHit[] LosBuf = new RaycastHit[24];
 
     // HUD
-    Text _title, _timer, _info, _banner;
+    Text _title, _timer, _info, _banner, _scoreText;
     GameObject _rosterPanel;
     Text _rosterText;
     GameObject _resultPanel;
@@ -255,8 +263,8 @@ public class MatchManager : MonoBehaviour
         brain.match = this;
         brain.map = _map;
         brain.lobby = _lobby;
+        brain.lobbyVolunteer = Random.value < botVolunteerChance; // walks onto the pad
 
-        if (Random.value < botVolunteerChance) _volunteers.Add(ch);
         UpdateRoster();
     }
 
@@ -273,15 +281,26 @@ public class MatchManager : MonoBehaviour
         return _map.RandomPointOnFloor();
     }
 
-    // ---------------- volunteers ----------------
+    // ---------------- volunteers (Roblox-style: stand on the red pad) ----------------
 
     public bool IsVolunteer(Character ch) { return _volunteers.Contains(ch); }
 
-    public void ToggleVolunteer(Character ch)
+    void RefreshVolunteersFromPlatform()
     {
-        if (Phase != MatchPhase.Lobby) return;
-        if (!_volunteers.Add(ch)) _volunteers.Remove(ch);
-        UpdateRoster();
+        if (_lobby == null) return;
+        bool changed = false;
+        foreach (var ch in Characters)
+        {
+            if (ch == null) continue;
+            bool on = _lobby.OnPlatform(ch.transform.position);
+            if (on != _volunteers.Contains(ch))
+            {
+                if (on) _volunteers.Add(ch);
+                else _volunteers.Remove(ch);
+                changed = true;
+            }
+        }
+        if (changed) UpdateRoster();
     }
 
     // ---------------- teams & win logic ----------------
@@ -345,10 +364,19 @@ public class MatchManager : MonoBehaviour
         }
     }
 
-    /// <summary>A shot hider joins the hunters (the infection rule).</summary>
+    /// <summary>A shot hider joins the hunters (the infection rule). Decoys just pop.</summary>
     public void Convert(Character victim)
     {
         if (victim == null || victim.team == Team.Hunter) return;
+
+        if (victim.isDecoy)
+        {
+            Characters.Remove(victim);
+            StartCoroutine(DecoyPop(victim));
+            if (_player.team == Team.Hunter) StartCoroutine(FlashBanner("A DECOY!", 1.2f));
+            return;
+        }
+
         MakeHunter(victim);
         UpdateInfo();
 
@@ -358,11 +386,42 @@ public class MatchManager : MonoBehaviour
         }
     }
 
+    IEnumerator DecoyPop(Character decoy)
+    {
+        if (decoy != null) decoy.motor.SetPose(Pose.Dead); // crumples like a dropped prop
+        yield return new WaitForSeconds(1.6f);
+        if (decoy != null) Destroy(decoy.gameObject);
+    }
+
+    IEnumerator FlashBanner(string text, float seconds)
+    {
+        _banner.color = Color.white;
+        _banner.text = text;
+        yield return new WaitForSeconds(seconds);
+        if (_banner.text == text) _banner.text = "";
+    }
+
+    /// <summary>One-use hider ability: leave a painted, posed copy of yourself behind.</summary>
+    public Character SpawnDecoy(Character owner)
+    {
+        if (owner == null || owner.team != Team.Hider) return null;
+        Vector3 pos = owner.transform.position - owner.transform.forward * 0.6f;
+        var d = Character.Create(owner.displayName + " decoy", pos, false, owner.variant);
+        d.isDecoy = true;
+        d.transform.rotation = owner.transform.rotation;
+        d.skin.CopySkinFrom(owner.skin);
+        // a standing decoy would sway — freeze it in a scenery pose instead
+        d.motor.SetPose(owner.motor.CurrentPose == Pose.Stand ? Pose.Statue : owner.motor.CurrentPose);
+        d.motor.movementLocked = true;
+        Characters.Add(d); // bots scan the list, so decoys draw real suspicion
+        return d;
+    }
+
     int HidersLeft()
     {
         int n = 0;
         foreach (var ch in Characters)
-            if (ch != null && ch.team == Team.Hider) n++;
+            if (ch != null && ch.team == Team.Hider && !ch.isDecoy) n++;
         return n;
     }
 
@@ -374,6 +433,14 @@ public class MatchManager : MonoBehaviour
 
         switch (Phase)
         {
+            case MatchPhase.Lobby:
+                if (Time.time >= _nextVolCheckAt)
+                {
+                    _nextVolCheckAt = Time.time + 0.25f;
+                    RefreshVolunteersFromPlatform();
+                }
+                break;
+
             case MatchPhase.Hide:
                 _timer.text = (_player.team == Team.Hunter ? "SEEK IN  " : "HIDE  ") + Mathf.Max(0, Mathf.CeilToInt(remaining));
                 if (remaining <= 0f && !_hunterEntryStarted)
@@ -385,10 +452,19 @@ public class MatchManager : MonoBehaviour
 
             case MatchPhase.Seek:
                 _timer.text = "SEEK  " + Mathf.Max(0, Mathf.CeilToInt(remaining));
+                if (Time.time >= _nextLosTickAt)
+                {
+                    _nextLosTickAt = Time.time + 0.5f;
+                    LosScoreTick();
+                }
                 if (remaining <= 0f)
                     EndMatch(_player.team == Team.Hider ? "TIME'S UP — YOU SURVIVED!" : "TIME'S UP — HIDERS WIN!");
                 break;
         }
+
+        // score readout glows gold for a beat whenever points come in
+        if (_scoreText != null)
+            _scoreText.color = Time.time - _lastGainAt < 0.45f ? new Color(1f, 0.85f, 0.3f) : Color.white;
     }
 
     public void SetPhase(MatchPhase phase)
@@ -434,13 +510,150 @@ public class MatchManager : MonoBehaviour
                 break;
         }
 
+        if (_scoreText != null)
+            _scoreText.gameObject.SetActive(
+                (phase == MatchPhase.Hide || phase == MatchPhase.Seek)
+                && _player != null && _player.team == Team.Hider);
+
         if (_rig != null) _rig.RefreshContextButton();
     }
 
     void EndMatch(string message)
     {
         SetPhase(MatchPhase.Result);
-        _resultText.text = message;
+        _info.text = "";
+        var sb = new System.Text.StringBuilder(message);
+        float pv;
+        _score.TryGetValue(_player, out pv);
+        sb.Append("\n\nYOUR STYLE SCORE  ").Append(Mathf.FloorToInt(pv));
+
+        var top = new List<KeyValuePair<Character, float>>();
+        foreach (var kv in _score)
+            if (kv.Key != null && !kv.Key.isDecoy && kv.Value >= 1f) top.Add(kv);
+        top.Sort((a, b) => b.Value.CompareTo(a.Value));
+        if (top.Count > 0)
+        {
+            sb.Append("\nBOLDEST HIDERS");
+            for (int i = 0; i < Mathf.Min(3, top.Count); i++)
+                sb.Append("\n").Append(i + 1).Append(".  ")
+                  .Append(top[i].Key.isPlayer ? "YOU" : top[i].Key.displayName)
+                  .Append("   ").Append(Mathf.FloorToInt(top[i].Value));
+        }
+        _resultText.text = sb.ToString();
+    }
+
+    // ---------------- style scoring ----------------
+
+    void AddScore(Character ch, float pts)
+    {
+        if (ch == null || ch.isDecoy) return;
+        float v;
+        _score.TryGetValue(ch, out v);
+        _score[ch] = v + pts;
+        if (ch.isPlayer)
+        {
+            _lastGainAt = Time.time;
+            UpdateScoreHud();
+        }
+    }
+
+    void UpdateScoreHud()
+    {
+        if (_scoreText == null) return;
+        float v;
+        _score.TryGetValue(_player, out v);
+        _scoreText.text = "STYLE  " + Mathf.FloorToInt(v);
+    }
+
+    /// <summary>The original's signature rule: surviving inside the hunter's view pays,
+    /// and the closer you dare to sit, the faster it pays.</summary>
+    void LosScoreTick()
+    {
+        foreach (var hider in Characters)
+        {
+            if (hider == null || hider.team != Team.Hider || hider.isDecoy) continue;
+            float best = 0f;
+            foreach (var h in Characters)
+            {
+                if (h == null || h.team != Team.Hunter) continue;
+                Vector3 to = hider.EyePos - h.EyePos;
+                float dist = to.magnitude;
+                if (dist > 14f) continue;
+                if (Vector3.Angle(h.transform.forward, to) > 70f) continue;
+                if (!HasLine(h, hider)) continue;
+                best = Mathf.Max(best, Mathf.Lerp(2.4f, 0.4f, dist / 14f));
+            }
+            if (best > 0f) AddScore(hider, best * 0.5f); // per half-second tick
+        }
+    }
+
+    bool HasLine(Character from, Character to)
+    {
+        Vector3 a = from.EyePos, b = to.EyePos;
+        int n = Physics.RaycastNonAlloc(new Ray(a, (b - a).normalized), LosBuf, Vector3.Distance(a, b) + 0.5f);
+        int best = -1;
+        for (int i = 0; i < n; i++)
+        {
+            if (Character.FromCollider(LosBuf[i].collider) == from) continue;
+            if (best < 0 || LosBuf[i].distance < LosBuf[best].distance) best = i;
+        }
+        if (best < 0) return false;
+        return Character.FromCollider(LosBuf[best].collider) == to;
+    }
+
+    /// <summary>Taunt: emote + noise. Points scale with how close the hunter is; every
+    /// bot hunter in earshot gets suspicious of you (the original's risk/reward whistle).</summary>
+    public void DoTaunt(Character ch)
+    {
+        if (ch == null || ch.team != Team.Hider || ch.isDecoy) return;
+        if (Phase != MatchPhase.Seek && Phase != MatchPhase.Hide) return;
+        if (!ch.motor.Taunt()) return; // on cooldown
+
+        StartCoroutine(TauntMarker(ch));
+        if (Phase != MatchPhase.Seek) return; // no hunter around yet — just the emote
+
+        float nearest = float.MaxValue;
+        foreach (var h in Characters)
+            if (h != null && h.team == Team.Hunter)
+                nearest = Mathf.Min(nearest, Vector3.Distance(h.transform.position, ch.transform.position));
+
+        AddScore(ch, nearest < 16f ? 5f + Mathf.Max(0f, 16f - nearest) : 2f);
+
+        foreach (var h in Characters)
+        {
+            if (h == null || h.team != Team.Hunter) continue;
+            var brain = h.GetComponent<BotBrain>();
+            if (brain == null) continue;
+            float d = Vector3.Distance(h.transform.position, ch.transform.position);
+            if (d < 18f) brain.HearTaunt(ch, Mathf.Lerp(0.9f, 0.25f, d / 18f));
+        }
+    }
+
+    IEnumerator TauntMarker(Character ch)
+    {
+        // a bold "!" pops over the taunter's head, floats up and fades
+        var go = new GameObject("TauntMark");
+        var tm = go.AddComponent<TextMesh>();
+        tm.text = "!";
+        tm.font = UiKit.DefaultFont;
+        tm.fontSize = 120;
+        tm.characterSize = 0.02f;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.color = new Color(1f, 0.85f, 0.25f);
+        if (UiKit.DefaultFont != null)
+            go.GetComponent<MeshRenderer>().sharedMaterial = UiKit.DefaultFont.material;
+
+        float t = 0f;
+        while (t < 1.2f && ch != null)
+        {
+            t += Time.deltaTime;
+            go.transform.position = ch.transform.position + Vector3.up * (1.7f + t * 0.5f);
+            if (Camera.main != null)
+                go.transform.rotation = Quaternion.LookRotation(go.transform.position - Camera.main.transform.position);
+            tm.color = new Color(1f, 0.85f, 0.25f, Mathf.Clamp01(1.4f - t));
+            yield return null;
+        }
+        Destroy(go);
     }
 
     void SetAllLocked(bool locked)
@@ -465,7 +678,7 @@ public class MatchManager : MonoBehaviour
             sb.Append("\n").Append(ch.isPlayer ? "> YOU" : "  " + ch.displayName);
             if (_volunteers.Contains(ch)) sb.Append("   [H]");
         }
-        sb.Append("\n\n[H] = wants to hunt");
+        sb.Append("\n\n[H] = on the hunter pad");
         _rosterText.text = sb.ToString();
     }
 
@@ -484,6 +697,10 @@ public class MatchManager : MonoBehaviour
 
         _info = UiKit.MakeText(root, "", 40, TextAnchor.MiddleCenter);
         UiKit.SetRect(_info.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -195), new Vector2(-40, 60));
+
+        // style score (top-left, hider-relevant)
+        _scoreText = UiKit.MakeText(root, "STYLE  0", 42, TextAnchor.UpperLeft);
+        UiKit.SetRect(_scoreText.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(32, -36), new Vector2(400, 60));
 
         // big centre banner for the hunter roulette / reveal moments
         _banner = UiKit.MakeText(root, "", 84, TextAnchor.MiddleCenter);

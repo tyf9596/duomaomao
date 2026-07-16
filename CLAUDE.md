@@ -22,11 +22,19 @@ for hiding *within* the hunter's line of sight.
     `sceneLoaded` hook so PLAY AGAIN scene reloads restart matches); phase flow
     **LOBBY→TRAVEL→HIDE→SEEK→RESULT** (2026-07-16 lobby feature, mirrors the original):
     everyone spawns in the LobbyRoom, bots trickle in like a matchmaking queue
-    (roster HUD top-right, `[H]` = volunteer), player volunteers via the context
-    button (HUNT?/HUNT!), hunter = roulette pick from volunteers (else anyone),
-    hiders teleport into the map behind a LoadingScreen while the **hunter waits in
-    the lobby** until hide time ends, then travels in with a red loading screen
-    ("HUNTER INCOMING!" warning for hiders); conversion + win logic, HUD. Lobby
+    (roster HUD top-right, `[H]` = volunteer), volunteering is **Roblox-style: stand
+    on the red hunter pad** (0.25s position tick; no button), hunter = roulette pick
+    from pad-standers (else anyone), hiders teleport into the map behind a
+    LoadingScreen while the **hunter waits in the lobby** until hide time ends, then
+    travels in with a red loading screen ("HUNTER INCOMING!" warning for hiders);
+    conversion + win logic, HUD. Also owns **style scoring** (original's rule:
+    0.5s LOS tick — points for being inside a hunter's view cone+LOS ≤14m, closer =
+    faster, `STYLE n` HUD gold-pulses on gain; result screen shows YOUR STYLE SCORE +
+    top-3 BOLDEST HIDERS), `DoTaunt` (emote + floating "!" TextMesh + points by
+    proximity + `BotBrain.HearTaunt` suspicion spike ≤18m — the original's whistle),
+    and `SpawnDecoy` (one-use hider clone: same variant, `CopySkinFrom` paint copy,
+    frozen scenery pose, joins Characters so bot hunters stalk it; shot decoys crumple
+    to Dead and pop — no conversion, "A DECOY!" banner for a human hunter). Lobby
     pacing fields (joinInterval*, lobbyCountdownSeconds, travelSeconds,
     botVolunteerChance) are public for tests/config
   - `Character.cs` — `Character.Create()` factory: CharacterController root + paintable
@@ -52,7 +60,10 @@ for hiding *within* the hunter's line of sight.
     teaser: rainbow N, B/W stripes S, warm/cool tiles E/W, checker floor, crates,
     bench, "PAINT - HIDE - SURVIVE" TextMesh sign). Invisible lid (collider only)
     stops wall-climbers, all renderers `ShadowCastingMode.Off` so the room doesn't
-    print a shadow on the map. `Build(map)` idempotent; `SpawnPoint()` for spawns
+    print a shadow on the map. **Red hunter pad** at the north wall ("STAND HERE TO
+    HUNT" TextMesh): `OnPlatform(pos)` / `PlatformSpot()`; volunteer bots path onto it
+    and sometimes chicken out (`BotBrain.lobbyVolunteer` + rethink churn).
+    `Build(map)` idempotent; `SpawnPoint()` for spawns
   - `LoadingScreen.cs` — the travel overlay ("进地图读条"): paint-roller drags a
     rainbow stroke as the progress bar (drips fall off passed sections, splats pop
     around, tips rotate, drifting diagonal stripes bg); hunter variant runs in reds
@@ -121,12 +132,15 @@ for hiding *within* the hunter's line of sight.
 - Patterned-surface hiding is the design meta (user call 2026-07-15, mirrors the Steam
   game): tiles/stripes/graffiti walls let players paint pattern-matching camo. Bots detect
   patterned ground (two-point sample, colour diff > 0.25) and use `FillStripes` camo.
-- Poses (6): Stand / Crouch(sit clip) / Statue(static) / Lie(static + body tipped -90°,
-  procedural, offset scales with rig) / Scarecrow(holding-both) / Chair(drive clip).
-  Pose int drives animator; movement input breaks the pose. Touch UI: POSE button opens
-  a 6-option picker strip (PlayerRig `_posePanel`); editor P key cycles.
-  Play-verified 2026-07-16: picker panel builds with all 6 labels, Scarecrow + Chair
-  animator states reached (decoy + player tests).
+- Poses (9): Stand / Crouch(sit clip) / Statue(static) / Lie(static + body tipped -90°,
+  procedural, offset scales with rig) / Scarecrow(holding-both) / Chair(drive clip) /
+  **Ball**(sit clip + procedural hands-on-head bone offsets in `CharacterMotor.LateUpdate`
+  — head +45°X, arms Euler(-165,0,±30) folding INWARD, tuned visually) / **Dead**(die
+  clip, freezes crumpled on last frame) / **Bend**(pick-up clip, state speed 0 +
+  cycleOffset 0.5 = frozen mid-stoop). Pose int drives animator; movement breaks the
+  pose. Touch UI: POSE button opens a 2-column 9-option picker (PlayerRig `_posePanel`);
+  editor P key cycles. All animator states play-verified 2026-07-16. **Idle state speed
+  is 0.2** in the controller — the clip's heavy breathing ruined posed hiding.
 - Character skins are **pure white, no source texture, no eyes** (user call 2026-07-14).
   The Kenney blocky FBX UVs are unusable for painting (mirrored limbs, shared verts, and
   the head is a 10x mesh on a 0.1x bone), so `PaintableBody` REBUILDS UVs at runtime:
@@ -213,11 +227,20 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
   sitter look right in screenshots, bots settle/patrol normally around the new clutter,
   zero game errors in console.
 - Lobby flow (2026-07-16, 4 play runs on Arena05, screenshot-verified): staggered bot
-  joins + roster + [H] markers, HUNT? volunteer toggle, roulette (roster hides for the
-  reveal), rainbow loading screen for hiders / red one for the hunter, hunter waits in
-  the lobby third-person (WAIT button, "SEEK IN n"), teleports (CC disable/enable) land
-  everyone on the map, in-play scene reload (PLAY AGAIN path) restarts the whole lobby
-  loop cleanly. Player verified on BOTH teams end-to-end.
+  joins + roster + [H] markers, roulette (roster hides for the reveal), rainbow loading
+  screen for hiders / red one for the hunter, hunter waits in the lobby third-person
+  (WAIT button, "SEEK IN n"), teleports (CC disable/enable) land everyone on the map,
+  in-play scene reload (PLAY AGAIN path) restarts the whole lobby loop cleanly. Player
+  verified on BOTH teams end-to-end.
+- Hider-abilities batch (2026-07-16, 2 play runs): hunter pad volunteering works for
+  player + bots (bot MANGO walked onto the pad and was picked), LOS scoring accrued
+  organically (FERN 16 / You 7 / PIXEL 3), taunts gave points + made a bot hunter
+  investigate, decoy cloned the player's stripes (variant-matched), drew the list into
+  bot scanning, and popped to a crumple on Convert without infecting, spectate (EYE)
+  followed the hunter's eyes and auto-cancelled on phase change, result scoreboard
+  renders top-3. Ball/Dead/Bend animator states + Ball's procedural head-hug verified
+  by screenshot; taunt "!" marker logic verified in code path (visual shot missed the
+  1.2s window — recheck casually next hands-on session).
 
 ## Roadmap (reordered 2026-07-14: user wants rich, good-looking levels first)
 
@@ -226,9 +249,9 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
 2. **Hands-on feel pass** (human): joystick/camera tuning, dash/climb feel, paint-mode UX;
    character polish — jump/fall blends (blocky set lacks those clips), die anim on
    conversion, `AverageColor` alpha-0 fix
-3. Hider fun: taunt button (emote-yes/no clips are imported already!), respot-during-seek
-   risk, points for line-of-sight hiding (the Steam game's signature scoring),
-   spectate-after-conversion
+3. Hider fun: ~~taunt button~~ ~~LOS style scoring~~ ~~hunter spectate~~ ~~decoy~~
+   (all shipped 2026-07-16) — remaining: respot-during-seek risk,
+   spectate-after-conversion (dead players watch the hunter), taunt SFX (whistle)
 4. Match config screen (bot count, timers — natural home: the lobby, whose pacing fields
    are already public); SFX/juice (shot, conversion sting, win fanfare)
 5. Android build via `unity-android-release` skill; then real netcode (NGO or Photon) to

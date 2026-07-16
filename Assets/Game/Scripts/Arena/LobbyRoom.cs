@@ -15,6 +15,10 @@ public class LobbyRoom : MonoBehaviour
     public Vector3 center;
     public Vector2 inner = new Vector2(15f, 11f); // walkable x/z
 
+    // Roblox-style volunteering: stand on the red pad = "I want to hunt"
+    public Vector3 platformCenter;
+    public Vector2 platformSize = new Vector2(3.4f, 2.6f);
+
     const float WallHeight = 4.2f;
     const float WallThickness = 0.4f;
 
@@ -58,6 +62,29 @@ public class LobbyRoom : MonoBehaviour
         Box(root, "Crate3", new Vector3(w * 0.5f - 1.5f, 1.15f, d * 0.5f - 1.4f), Vector3.one * 0.5f, wood);
         Box(root, "Bench", new Vector3(-w * 0.5f + 0.9f, 0.22f, 0f), new Vector3(0.6f, 0.45f, 2.2f), woodDark);
 
+        // hunter pad: stand here to volunteer (checked by MatchManager every lobby tick)
+        Box(root, "HunterPad", new Vector3(0f, 0.11f, d * 0.5f - 2.0f),
+            new Vector3(room.platformSize.x, 0.22f, room.platformSize.y),
+            MatPlain(new Color(0.78f, 0.22f, 0.18f)));
+        Box(root, "HunterPadTrim", new Vector3(0f, 0.035f, d * 0.5f - 2.0f),
+            new Vector3(room.platformSize.x + 0.5f, 0.07f, room.platformSize.y + 0.5f),
+            MatPlain(new Color(0.35f, 0.1f, 0.08f)));
+        room.platformCenter = room.center + new Vector3(0f, 0.22f, d * 0.5f - 2.0f);
+
+        var padSign = new GameObject("PadSign");
+        padSign.transform.SetParent(root.transform, false);
+        padSign.transform.localPosition = new Vector3(0f, 2.1f, d * 0.5f - 2.0f);
+        var ptm = padSign.AddComponent<TextMesh>();
+        ptm.text = "STAND HERE TO HUNT";
+        ptm.font = UiKit.DefaultFont;
+        ptm.fontSize = 48;
+        ptm.characterSize = 0.028f;
+        ptm.anchor = TextAnchor.MiddleCenter;
+        ptm.color = new Color(1f, 0.45f, 0.4f);
+        var ptmr = padSign.GetComponent<MeshRenderer>();
+        if (UiKit.DefaultFont != null) ptmr.sharedMaterial = UiKit.DefaultFont.material;
+        ptmr.shadowCastingMode = ShadowCastingMode.Off;
+
         // wall sign (TextMesh reads correctly from inside the room)
         var sign = new GameObject("Sign");
         sign.transform.SetParent(root.transform, false);
@@ -83,6 +110,23 @@ public class LobbyRoom : MonoBehaviour
             (Random.value - 0.5f) * (inner.x - 3f),
             0.05f,
             (Random.value - 0.5f) * (inner.y - 3f));
+    }
+
+    /// <summary>Is this character standing on the hunter pad?</summary>
+    public bool OnPlatform(Vector3 worldPos)
+    {
+        return Mathf.Abs(worldPos.x - platformCenter.x) < platformSize.x * 0.5f
+            && Mathf.Abs(worldPos.z - platformCenter.z) < platformSize.y * 0.5f
+            && Mathf.Abs(worldPos.y - platformCenter.y) < 1.2f;
+    }
+
+    /// <summary>A standing spot on the pad (bots that want to hunt walk here).</summary>
+    public Vector3 PlatformSpot()
+    {
+        return platformCenter + new Vector3(
+            (Random.value - 0.5f) * (platformSize.x - 1.4f),
+            0f,
+            (Random.value - 0.5f) * (platformSize.y - 1.4f));
     }
 
     // ---------------- builders ----------------

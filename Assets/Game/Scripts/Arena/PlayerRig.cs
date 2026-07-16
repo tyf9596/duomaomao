@@ -27,9 +27,17 @@ public class PlayerRig : MonoBehaviour
     HoldButton _jumpHold;
     Text _actionLabel;
     Image _actionBg;
+    GameObject _actionRoot;
     GameObject _crosshair;
     GameObject _posePanel;
+    GameObject _tauntBtn;
+    GameObject _decoyBtn;
+    GameObject _eyeBtn;
+    Text _eyeLabel;
+    Image _eyeBg;
     SelfPaintMode _paint;
+    bool _decoyUsed;
+    bool _spectating;
 
     void TogglePosePanel()
     {
@@ -66,33 +74,36 @@ public class PlayerRig : MonoBehaviour
     }
 
     /// <summary>
-    /// The big context button is phase-aware: HUNT? volunteer toggle in the lobby,
-    /// PAINT for hiders, SHOOT for hunters. MatchManager calls this on phase changes.
+    /// Phase-aware button refresh: PAINT/SHOOT/WAIT on the big context button (hidden in
+    /// the lobby — you volunteer by standing on the red pad), and visibility of the hider
+    /// ability buttons (TAUNT/DECOY/EYE). MatchManager calls this on phase changes.
     /// </summary>
     public void RefreshContextButton()
     {
         if (_actionLabel == null || _actionBg == null) return;
-        if (match != null && match.Phase == MatchPhase.Lobby)
+        bool lobby = match != null && match.Phase == MatchPhase.Lobby;
+        bool hider = self.team == Team.Hider;
+        bool inRound = match != null && (match.Phase == MatchPhase.Hide || match.Phase == MatchPhase.Seek);
+
+        if (_actionRoot != null) _actionRoot.SetActive(!lobby);
+
+        if (self.team == Team.Hunter)
         {
-            bool v = match.IsVolunteer(self);
-            _actionLabel.text = v ? "HUNT!" : "HUNT?";
-            _actionBg.color = v ? new Color(0.75f, 0.22f, 0.18f, 0.9f) : new Color(0.35f, 0.35f, 0.4f, 0.85f);
-        }
-        else if (match != null && match.Phase != MatchPhase.Seek && self.team == Team.Hunter)
-        {
-            _actionLabel.text = "WAIT";
-            _actionBg.color = new Color(0.35f, 0.35f, 0.4f, 0.85f);
-        }
-        else if (self.team == Team.Hunter)
-        {
-            _actionLabel.text = "SHOOT";
-            _actionBg.color = new Color(0.75f, 0.22f, 0.18f, 0.85f);
+            bool wait = match != null && match.Phase != MatchPhase.Seek && match.Phase != MatchPhase.Result;
+            _actionLabel.text = wait ? "WAIT" : "SHOOT";
+            _actionBg.color = wait ? new Color(0.35f, 0.35f, 0.4f, 0.85f) : new Color(0.75f, 0.22f, 0.18f, 0.85f);
         }
         else
         {
             _actionLabel.text = "PAINT";
             _actionBg.color = new Color(0.24f, 0.5f, 0.75f, 0.85f);
         }
+
+        if (_tauntBtn != null) _tauntBtn.SetActive(hider && match != null && match.Phase == MatchPhase.Seek);
+        if (_decoyBtn != null) _decoyBtn.SetActive(hider && inRound && !_decoyUsed);
+        if (_eyeBtn != null) _eyeBtn.SetActive(hider && inRound);
+        if (_spectating && !(hider && inRound)) StopSpectate();
+
         UpdateViewMode(); // phase changes can flip hunter FPS on/off
     }
 
@@ -120,7 +131,7 @@ public class PlayerRig : MonoBehaviour
         if (self == null || cam == null) return;
 
         bool painting = _paint != null && _paint.Active;
-        if (!painting)
+        if (!painting && !_spectating)
         {
             ReadTouch();
             ReadEditorFallback();
@@ -129,10 +140,17 @@ public class PlayerRig : MonoBehaviour
             if (_firstPerson)
                 self.transform.rotation = Quaternion.Euler(0f, cam.yaw, 0f);
         }
+        else if (_spectating)
+        {
+            self.motor.desiredMove = Vector3.zero; // frozen while watching the hunter
+        }
 
         // editor hotkeys that work in any mode
         var kb = Keyboard.current;
         if (kb != null && kb.fKey.wasPressedThisFrame) OnAction();
+        if (kb != null && kb.tKey.wasPressedThisFrame) OnTaunt();
+        if (kb != null && kb.qKey.wasPressedThisFrame) OnDecoy();
+        if (kb != null && kb.vKey.wasPressedThisFrame) ToggleSpectate();
     }
 
     void ReadTouch()
@@ -230,16 +248,47 @@ public class PlayerRig : MonoBehaviour
         if (_stickKnob != null) _stickKnob.anchoredPosition = _stick * 95f;
     }
 
+    void OnTaunt()
+    {
+        if (self.team != Team.Hider || match == null) return;
+        match.DoTaunt(self);
+    }
+
+    void OnDecoy()
+    {
+        if (_decoyUsed || self.team != Team.Hider || match == null) return;
+        if (match.Phase != MatchPhase.Hide && match.Phase != MatchPhase.Seek) return;
+        if (match.SpawnDecoy(self) == null) return;
+        _decoyUsed = true;
+        RefreshContextButton();
+    }
+
+    void ToggleSpectate()
+    {
+        if (_spectating) { StopSpectate(); return; }
+        if (self.team != Team.Hider || match == null) return;
+        if (_paint != null && _paint.Active) return; // not while painting
+        Character hunter = null;
+        foreach (var c in match.Characters)
+            if (c != null && c.team == Team.Hunter) { hunter = c; break; }
+        if (hunter == null) return;
+        _spectating = true;
+        cam.spectate = hunter;
+        self.motor.desiredMove = Vector3.zero;
+        if (_eyeLabel != null) _eyeLabel.text = "BACK";
+        if (_eyeBg != null) _eyeBg.color = new Color(0.75f, 0.22f, 0.18f, 0.9f);
+    }
+
+    void StopSpectate()
+    {
+        _spectating = false;
+        if (cam != null) cam.spectate = null;
+        if (_eyeLabel != null) _eyeLabel.text = "EYE";
+        if (_eyeBg != null) _eyeBg.color = new Color(0.25f, 0.25f, 0.3f, 0.85f);
+    }
+
     void OnAction()
     {
-        // in the lobby the context button is the hunter-volunteer toggle
-        if (match != null && match.Phase == MatchPhase.Lobby)
-        {
-            match.ToggleVolunteer(self);
-            RefreshContextButton();
-            return;
-        }
-
         if (self.team == Team.Hider)
         {
             if (match != null && match.Phase != MatchPhase.Hide && match.Phase != MatchPhase.Seek) return;
@@ -301,16 +350,17 @@ public class PlayerRig : MonoBehaviour
         UiKit.SetRect((RectTransform)pose.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-160, 500), new Vector2(180, 180));
         pose.onClick.AddListener(TogglePosePanel);
 
-        // pose picker: a strip of options above the POSE button
+        // pose picker: a 2-column grid above the POSE button (9 poses)
         _posePanel = new GameObject("PosePanel", typeof(RectTransform));
         _posePanel.transform.SetParent(root, false);
-        UiKit.SetRect((RectTransform)_posePanel.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(-160, 610), new Vector2(240, 520));
-        string[] poseNames = { "STAND", "CROUCH", "STATUE", "LIE", "SCARECROW", "CHAIR" };
+        UiKit.SetRect((RectTransform)_posePanel.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(-290, 610), new Vector2(500, 440));
+        string[] poseNames = { "STAND", "CROUCH", "STATUE", "LIE", "SCARECROW", "CHAIR", "BALL", "DEAD", "BEND" };
         for (int i = 0; i < poseNames.Length; i++)
         {
             Pose p = (Pose)i;
-            var pb = UiKit.MakeButton(_posePanel.transform, poseNames[i], new Color(0.18f, 0.18f, 0.22f, 0.92f), Color.white, 34);
-            UiKit.SetRect((RectTransform)pb.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, i * 84f), new Vector2(230, 76));
+            var pb = UiKit.MakeButton(_posePanel.transform, poseNames[i], new Color(0.18f, 0.18f, 0.22f, 0.92f), Color.white, 32);
+            UiKit.SetRect((RectTransform)pb.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                new Vector2(i % 2 == 0 ? -125f : 125f, (i / 2) * 84f), new Vector2(240, 76));
             pb.onClick.AddListener(() =>
             {
                 self.motor.SetPose(p);
@@ -322,8 +372,30 @@ public class PlayerRig : MonoBehaviour
         var action = UiKit.MakeButton(root, "PAINT", new Color(0.24f, 0.5f, 0.75f, 0.85f), Color.white, 46, round: true);
         UiKit.SetRect((RectTransform)action.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-400, 560), new Vector2(230, 230));
         action.onClick.AddListener(OnAction);
+        _actionRoot = action.gameObject;
         _actionBg = action.GetComponent<Image>();
         _actionLabel = action.GetComponentInChildren<Text>();
+
+        // hider abilities: taunt (style points, makes noise), one-use decoy, hunter-cam
+        var tauntB = UiKit.MakeButton(root, "TAUNT", new Color(0.62f, 0.45f, 0.15f, 0.85f), Color.white, 32, round: true);
+        UiKit.SetRect((RectTransform)tauntB.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-620, 330), new Vector2(150, 150));
+        tauntB.onClick.AddListener(OnTaunt);
+        _tauntBtn = tauntB.gameObject;
+        _tauntBtn.SetActive(false);
+
+        var decoyB = UiKit.MakeButton(root, "DECOY", new Color(0.4f, 0.3f, 0.55f, 0.85f), Color.white, 30, round: true);
+        UiKit.SetRect((RectTransform)decoyB.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0.5f), new Vector2(-620, 510), new Vector2(150, 150));
+        decoyB.onClick.AddListener(OnDecoy);
+        _decoyBtn = decoyB.gameObject;
+        _decoyBtn.SetActive(false);
+
+        var eyeB = UiKit.MakeButton(root, "EYE", new Color(0.25f, 0.25f, 0.3f, 0.85f), Color.white, 32, round: true);
+        UiKit.SetRect((RectTransform)eyeB.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-100, -320), new Vector2(150, 150));
+        eyeB.onClick.AddListener(ToggleSpectate);
+        _eyeBtn = eyeB.gameObject;
+        _eyeBg = eyeB.GetComponent<Image>();
+        _eyeLabel = eyeB.GetComponentInChildren<Text>();
+        _eyeBtn.SetActive(false);
 
         // Hunter crosshair
         var cross = UiKit.MakeText(root, "+", 72, TextAnchor.MiddleCenter);

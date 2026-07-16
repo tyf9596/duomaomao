@@ -231,6 +231,16 @@ public class PaintableBody : MonoBehaviour
         _dirty = true;
     }
 
+    /// <summary>Clone another body's paint job (decoys copy their owner — same variant,
+    /// same runtime UV atlas, so a raw pixel copy is exact).</summary>
+    public void CopySkinFrom(PaintableBody other)
+    {
+        if (other == null || other._pixels == null || _pixels == null) return;
+        int n = Mathf.Min(_pixels.Length, other._pixels.Length);
+        System.Array.Copy(other._pixels, _pixels, n);
+        _dirty = true;
+    }
+
     public void Fill(Color color)
     {
         Color32 c = color;

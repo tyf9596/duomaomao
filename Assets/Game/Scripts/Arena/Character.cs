@@ -14,7 +14,9 @@ public class Character : MonoBehaviour
 {
     public Team team = Team.Hider;
     public bool isPlayer;
+    public bool isDecoy;          // shootable fake hider — pops without converting anyone
     public string displayName = "Bot";
+    public string variant;        // blocky model letter a–r (decoys clone their owner's)
 
     [HideInInspector] public CharacterMotor motor;
     [HideInInspector] public PaintableBody skin;
@@ -23,6 +25,11 @@ public class Character : MonoBehaviour
     public Vector3 EyePos => transform.position + Vector3.up * 1.15f;
 
     public static Character Create(string name, Vector3 pos, bool isPlayer)
+    {
+        return Create(name, pos, isPlayer, null);
+    }
+
+    public static Character Create(string name, Vector3 pos, bool isPlayer, string forceVariant)
     {
         var root = new GameObject(name);
         root.transform.position = pos;
@@ -39,7 +46,9 @@ public class Character : MonoBehaviour
         // handles locomotion.
         GameObject body = null;
         Animator anim = null;
-        string variant = ((char)('a' + Random.Range(0, 18))).ToString();
+        string variant = string.IsNullOrEmpty(forceVariant)
+            ? ((char)('a' + Random.Range(0, 18))).ToString()
+            : forceVariant;
         var prefab = Resources.Load<GameObject>("Characters/character-" + variant);
         if (prefab != null)
         {
@@ -88,6 +97,7 @@ public class Character : MonoBehaviour
         var ch = root.AddComponent<Character>();
         ch.isPlayer = isPlayer;
         ch.displayName = name;
+        ch.variant = variant;
         ch.motor = motor;
         ch.skin = skin;
         ch.bodyCollider = body.GetComponentInChildren<Collider>();
