@@ -35,6 +35,14 @@ for hiding *within* the hunter's line of sight.
   - `BotBrain.cs` — hiders: run to spot → `FillCamo(surface colour)` → pose → freeze;
     hunters: patrol + per-target suspicion (LOS, movement, pose, camo-vs-background match,
     close-range reveal) → approach → shotgun
+  - `DecoyStatue.cs` — scene marker that spawns a painted, posed mannequin at runtime
+    (random blocky model, PaintableBody, animator pose; paint modes Stone / MatchGround
+    two-point auto-camo / Stripes). Character-shaped scenery = doubt for hunters; decoys
+    are NOT Characters, so bot hunters ignore them — they exist to fool humans
+  - `LobbyRoom.cs` — **WIP, not wired in yet** (left over from the 2026-07-15 session):
+    runtime-built matchmaking room floating high beside the map (patterned walls, crates,
+    invisible lid). `LobbyRoom.Build(map)` exists but nothing calls it — MatchManager
+    integration (spawn there, teleport hiders down on match start) is still to do
   - `ThirdPersonCamera.cs`, `Shotgun.cs` (pellet cone, converts hiders), `PaintableBody.cs`
     (runtime tex, `FillCamo`, `AverageColor` for AI), `ArenaMap.cs` (marker + floor sampling),
     `UiKit.cs` (runtime UI helpers + HoldButton)
@@ -47,7 +55,13 @@ for hiding *within* the hunter's line of sight.
   surfaces for camo play (tile patio + angled tile wall, 2 rainbow graffiti walls, 2 B/W
   stripe panels, brick wall); NE park has a **climbable 2.8m rock plateau with steps**;
   SW crate yard + back alley between the SE houses (loop route) + hedge S-curves add
-  cover clutter. `ArenaMap` overrides: 9 characters, hide 50s, seek 210s,
+  cover clutter. Density pass 2026-07-16 (from reference-game research): 6 `DecoyStatue`
+  markers (2 park statues + fallen statue by the plateau, corn-garden scarecrow, B/W-stripe
+  mannequin ON the zebra crossing, auto-camo sitter on the tile plaza), pumpkin patch (6),
+  cardboard cluster at the alley's south mouth, roadworks cones around the firetruck,
+  flatbed truck + climbable cargo boxes (bed y=0.61) by the N road, plush-bear pile at the
+  NW bench, rainbow/stripe panels on the SE houses' BACK walls (long wall-rhythm runs).
+  `ArenaMap` overrides: 9 characters, hide 50s, seek 210s,
   `floorNormalMinY 0.85` (no spawns on sloped house roofs)
 - `Assets/Game/Scenes/Arena04.unity` — 32×24m two-house map, kept as secondary
 - `Assets/Game/Scenes/Arena03.unity` — smaller first kit map (16×12m), kept as tertiary
@@ -87,8 +101,8 @@ for hiding *within* the hunter's line of sight.
   procedural, offset scales with rig) / Scarecrow(holding-both) / Chair(drive clip).
   Pose int drives animator; movement input breaks the pose. Touch UI: POSE button opens
   a 6-option picker strip (PlayerRig `_posePanel`); editor P key cycles.
-  **NOT yet play-verified: pose picker UI + Scarecrow/Chair states (added right before
-  the 2026-07-15 GitHub push) — verify first thing next session.**
+  Play-verified 2026-07-16: picker panel builds with all 6 labels, Scarecrow + Chair
+  animator states reached (decoy + player tests).
 - Character skins are **pure white, no source texture, no eyes** (user call 2026-07-14).
   The Kenney blocky FBX UVs are unusable for painting (mirrored limbs, shared verts, and
   the head is a 10x mesh on a 0.1x bone), so `PaintableBody` REBUILDS UVs at runtime:
@@ -104,6 +118,26 @@ for hiding *within* the hunter's line of sight.
   over UI belong to UI (`UiGuard`); everything else is camera.
 - ASCII-only UI labels (LegacyRuntime.ttf tofu risk on device).
 - Poses only transform the visual body child; the CC hitbox stays upright (accepted for now).
+
+## Reference-game level design (researched 2026-07-16, apply to all maps)
+
+Original has 7 maps (Mansion, Sewer, Backrooms, Indoor Country, Penguin Hotel, Sugar Land,
+Osaka — mostly INDOOR diorama-like, small; the smallest, Osaka, is the most liked).
+Principles worth copying:
+1. **Character-shaped props everywhere** (horse/penguin statues, scarecrows, plushes,
+   fallen statues) — a posed hider reads as "the N+1th prop". Ours: `DecoyStatue`.
+2. **Prop families / repetition** ("repeated props, merciless colors") — rows of pumpkins,
+   crates, cones, trash bags; duplication creates camouflage confusion.
+3. **Zone identity** — each map plays as themed zones w/ own palette + prop inventory,
+   joined by narrow connectors; players "commit to one room family per round".
+4. **Wall rhythm continuity** — long patterned runs (tiles/graffiti/stripes) reward
+   painting yourself as a continuation of the pattern.
+5. **Verticality & perches** — mezzanine sightlines, sign perches, truck beds; hunters
+   rarely look up.
+6. **Hide in the OPEN** — LOS scoring means good spots are visible-but-unnoticed stage
+   areas facing hunter traffic paths, not occlusion corners.
+7. **Silhouette vs colour** — dim zones (Sewer) test shape; monotone zones (Backrooms)
+   make colour free and shape expensive. Lighting variety is a camo axis (future maps).
 
 ## Unity MCP + editor quirks (hard-won)
 
@@ -146,6 +180,10 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
   to exact grass green after the UV-sampling fix, cascade converted a bot mid-seek, and a
   timed-out round ended HIDERS WIN. Both endings observed.
 - Human touch controls & paint-mode UX still need a hands-on device/editor test.
+- Arena05 density pass (2026-07-16, play mode): all 6 decoys spawn painted + posed
+  (Scarecrow/Chair/Sit/Static states confirmed), zebra mannequin + tile-plaza auto-camo
+  sitter look right in screenshots, bots settle/patrol normally around the new clutter,
+  zero game errors in console.
 
 ## Roadmap (reordered 2026-07-14: user wants rich, good-looking levels first)
 

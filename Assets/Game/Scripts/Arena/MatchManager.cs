@@ -1,43 +1,59 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public enum MatchPhase { Intro, Hide, Seek, Result }
+public enum MatchPhase { Lobby, Travel, Hide, Seek, Result }
 
 /// <summary>
 /// One offline match against bots — the AI-first version of the PvP loop:
-///   INTRO  — roles are dealt (one random hunter), a banner tells you yours.
-///   HIDE   — hiders run/dash/climb/pose and paint themselves; the hunter is blindfolded
-///            (bots idle, a human hunter gets a curtain with a countdown).
+///   LOBBY  — everyone gathers in the floating lobby room; bots trickle in like a
+///            real matchmaking queue, players volunteer to hunt (HUNT? button),
+///            then a roulette picks the hunter from the volunteers.
+///   TRAVEL — the hiders are teleported down into the map behind a paint-roller
+///            loading screen; the hunter STAYS in the lobby.
+///   HIDE   — hiders run/dash/climb/pose and paint themselves while the hunter
+///            waits upstairs; when time is up the hunter travels in too.
 ///   SEEK   — the hunter stalks and shoots; every hider hit JOINS the hunter team.
 ///   RESULT — hunters win if no hider survives the clock, otherwise hiders win.
-/// Bootstraps itself into any scene with an ArenaMap; characters are built in code,
-/// so arena scenes only need geometry with colliders.
+/// Bootstraps itself into any scene with an ArenaMap; characters, lobby and UI are
+/// all built in code, so arena scenes only need geometry with colliders.
 /// </summary>
 public class MatchManager : MonoBehaviour
 {
     [Header("Match rules")]
     public int totalCharacters = 7; // 1 human + bots
-    public float introSeconds = 2.5f;
     public float hideSeconds = 45f;
     public float seekSeconds = 150f;
+
+    [Header("Lobby pacing")]
+    public float joinIntervalMin = 0.4f;
+    public float joinIntervalMax = 1.3f;
+    public float lobbyCountdownSeconds = 8f;
+    public float travelSeconds = 3.2f;
+    [Range(0f, 1f)] public float botVolunteerChance = 0.3f;
 
     public MatchPhase Phase { get; private set; }
     public readonly List<Character> Characters = new List<Character>();
 
     static readonly Color HunterColor = new Color(0.78f, 0.22f, 0.18f);
+    static readonly string[] BotNames =
+        { "MOSS", "BRICK", "PIXEL", "SOCKS", "MANGO", "OTTO", "FERN", "LUMEN", "TAIGA", "PLANK", "CINDER", "DOT" };
 
     Character _player;
     PlayerRig _rig;
     ThirdPersonCamera _cam;
     ArenaMap _map;
+    LobbyRoom _lobby;
+    readonly HashSet<Character> _volunteers = new HashSet<Character>();
     float _phaseEndsAt;
+    bool _hunterEntryStarted;
 
     // HUD
-    Text _title, _timer, _info;
-    GameObject _curtain;
-    Text _curtainText;
+    Text _title, _timer, _info, _banner;
+    GameObject _rosterPanel;
+    Text _rosterText;
     GameObject _resultPanel;
     Text _resultText;
 
@@ -74,41 +90,173 @@ public class MatchManager : MonoBehaviour
         _cam = mainCam.gameObject.AddComponent<ThirdPersonCamera>();
 
         PaintUI.EnsureEventSystem();
-        SpawnCharacters();
+        _lobby = LobbyRoom.Build(_map);
+        SpawnPlayer();
         BuildHUD();
-        SetPhase(MatchPhase.Intro);
+        UpdateRoster();
+        StartCoroutine(LobbyFlow());
     }
 
-    void SpawnCharacters()
+    // ---------------- lobby & travel sequence ----------------
+
+    IEnumerator LobbyFlow()
     {
-        int hunterIndex = Random.Range(0, totalCharacters);
-        var used = new List<Vector3>();
+        SetPhase(MatchPhase.Lobby);
 
-        for (int i = 0; i < totalCharacters; i++)
+        // matchmaking feel: bots join the room one by one
+        while (Characters.Count < totalCharacters)
         {
-            Vector3 pos = PickSpawn(used);
-            used.Add(pos);
-            bool isPlayer = i == 0;
-            var ch = Character.Create(isPlayer ? "You" : "Bot " + i, pos, isPlayer);
-            Characters.Add(ch);
-
-            if (isPlayer)
-            {
-                _player = ch;
-                _cam.target = ch.transform;
-                _rig = ch.gameObject.AddComponent<PlayerRig>();
-                _rig.Setup(ch, _cam, this);
-            }
-            else
-            {
-                var brain = ch.gameObject.AddComponent<BotBrain>();
-                brain.self = ch;
-                brain.match = this;
-                brain.map = _map;
-            }
-
-            if (i == hunterIndex) MakeHunter(ch);
+            yield return new WaitForSeconds(Random.Range(joinIntervalMin, joinIntervalMax));
+            SpawnBot();
+            _title.text = "WAITING FOR PLAYERS  " + Characters.Count + "/" + totalCharacters;
         }
+
+        _title.text = "ROOM FULL!";
+        yield return new WaitForSeconds(0.8f);
+
+        float end = Time.time + lobbyCountdownSeconds;
+        int last = -1;
+        while (Time.time < end)
+        {
+            int s = Mathf.CeilToInt(end - Time.time);
+            if (s != last) { last = s; _title.text = "MATCH STARTS IN " + s; }
+            yield return null;
+        }
+        _title.text = "";
+
+        // hunter roulette — volunteers first, otherwise anyone
+        Character hunter = PickHunter();
+        SetAllLocked(true); // everyone freezes for the reveal
+        yield return HunterRoulette(hunter);
+        MakeHunter(hunter);
+        _banner.text = hunter.isPlayer ? "YOU ARE THE HUNTER!" : hunter.displayName + " IS THE HUNTER!";
+        yield return new WaitForSeconds(1.5f);
+        _banner.text = "";
+        _banner.color = Color.white;
+
+        yield return TravelHiders();
+    }
+
+    Character PickHunter()
+    {
+        var pool = new List<Character>();
+        foreach (var ch in Characters)
+            if (ch != null && _volunteers.Contains(ch)) pool.Add(ch);
+        if (pool.Count == 0)
+            foreach (var ch in Characters)
+                if (ch != null) pool.Add(ch);
+        return pool[Random.Range(0, pool.Count)];
+    }
+
+    IEnumerator HunterRoulette(Character chosen)
+    {
+        _banner.color = Color.white;
+        float step = 0.055f;
+        while (step < 0.45f)
+        {
+            var any = Characters[Random.Range(0, Characters.Count)];
+            _banner.text = any.isPlayer ? "YOU" : any.displayName;
+            yield return new WaitForSeconds(step);
+            step *= 1.22f;
+        }
+        _banner.color = new Color(1f, 0.35f, 0.3f);
+        _banner.text = chosen.isPlayer ? "YOU" : chosen.displayName;
+        yield return new WaitForSeconds(0.6f);
+    }
+
+    IEnumerator TravelHiders()
+    {
+        SetPhase(MatchPhase.Travel);
+        bool playerGoes = _player.team == Team.Hider;
+        if (playerGoes)
+            LoadingScreen.Show(MapDisplayName(), HidersLeft() + " HIDERS DEPLOYING", travelSeconds, false);
+        else
+            _title.text = "HIDERS ARE DEPLOYING...";
+
+        yield return new WaitForSeconds(0.8f); // overlay is opaque by now
+        var used = new List<Vector3>();
+        foreach (var ch in Characters)
+        {
+            if (ch == null || ch.team != Team.Hider) continue;
+            Vector3 p = PickSpawn(used);
+            used.Add(p);
+            Teleport(ch, p);
+        }
+        yield return new WaitForSeconds(Mathf.Max(0.1f, travelSeconds - 0.8f));
+        SetPhase(MatchPhase.Hide);
+    }
+
+    IEnumerator HunterEntry()
+    {
+        SetPhase(MatchPhase.Travel);
+        bool playerGoes = _player.team == Team.Hunter;
+        if (playerGoes)
+        {
+            LoadingScreen.Show(MapDisplayName(), "THE HUNT BEGINS", travelSeconds, true);
+        }
+        else
+        {
+            _title.text = "HUNTER INCOMING!";
+            _banner.color = new Color(1f, 0.35f, 0.3f);
+            _banner.text = "GET READY";
+        }
+
+        yield return new WaitForSeconds(0.8f);
+        foreach (var ch in Characters)
+            if (ch != null && ch.team == Team.Hunter) Teleport(ch, _map.RandomPointOnFloor());
+        yield return new WaitForSeconds(Mathf.Max(0.1f, travelSeconds - 0.8f));
+        _banner.text = "";
+        _banner.color = Color.white;
+        SetPhase(MatchPhase.Seek);
+    }
+
+    static void Teleport(Character ch, Vector3 pos)
+    {
+        var cc = ch.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+        ch.transform.position = pos + Vector3.up * 0.05f;
+        if (cc != null) cc.enabled = true;
+    }
+
+    string MapDisplayName()
+    {
+        switch (SceneManager.GetActiveScene().name)
+        {
+            case "Arena05": return "THE NEIGHBORHOOD";
+            case "Arena04": return "TWIN HOUSES";
+            case "Arena03": return "THE WAREHOUSE";
+            case "Diorama02": return "THE DIORAMA";
+            default: return SceneManager.GetActiveScene().name.ToUpper();
+        }
+    }
+
+    // ---------------- spawning ----------------
+
+    void SpawnPlayer()
+    {
+        var ch = Character.Create("You", _lobby.SpawnPoint(), true);
+        Characters.Add(ch);
+        _player = ch;
+        _cam.target = ch.transform;
+        _rig = ch.gameObject.AddComponent<PlayerRig>();
+        _rig.Setup(ch, _cam, this);
+    }
+
+    void SpawnBot()
+    {
+        string name = BotNames[(Characters.Count - 1) % BotNames.Length];
+        // drop in from slightly above the floor — a tiny "joined" moment
+        var ch = Character.Create(name, _lobby.SpawnPoint() + Vector3.up * 1.4f, false);
+        Characters.Add(ch);
+
+        var brain = ch.gameObject.AddComponent<BotBrain>();
+        brain.self = ch;
+        brain.match = this;
+        brain.map = _map;
+        brain.lobby = _lobby;
+
+        if (Random.value < botVolunteerChance) _volunteers.Add(ch);
+        UpdateRoster();
     }
 
     Vector3 PickSpawn(List<Vector3> used)
@@ -123,6 +271,19 @@ public class MatchManager : MonoBehaviour
         }
         return _map.RandomPointOnFloor();
     }
+
+    // ---------------- volunteers ----------------
+
+    public bool IsVolunteer(Character ch) { return _volunteers.Contains(ch); }
+
+    public void ToggleVolunteer(Character ch)
+    {
+        if (Phase != MatchPhase.Lobby) return;
+        if (!_volunteers.Add(ch)) _volunteers.Remove(ch);
+        UpdateRoster();
+    }
+
+    // ---------------- teams & win logic ----------------
 
     void MakeHunter(Character ch)
     {
@@ -204,21 +365,21 @@ public class MatchManager : MonoBehaviour
         return n;
     }
 
+    // ---------------- phase machine ----------------
+
     void Update()
     {
         float remaining = _phaseEndsAt - Time.time;
 
         switch (Phase)
         {
-            case MatchPhase.Intro:
-                if (remaining <= 0f) SetPhase(MatchPhase.Hide);
-                break;
-
             case MatchPhase.Hide:
-                _timer.text = "HIDE  " + Mathf.Max(0, Mathf.CeilToInt(remaining));
-                if (_curtain.activeSelf)
-                    _curtainText.text = "HIDERS ARE HIDING...\n\n" + Mathf.Max(0, Mathf.CeilToInt(remaining));
-                if (remaining <= 0f) SetPhase(MatchPhase.Seek);
+                _timer.text = (_player.team == Team.Hunter ? "SEEK IN  " : "HIDE  ") + Mathf.Max(0, Mathf.CeilToInt(remaining));
+                if (remaining <= 0f && !_hunterEntryStarted)
+                {
+                    _hunterEntryStarted = true;
+                    StartCoroutine(HunterEntry());
+                }
                 break;
 
             case MatchPhase.Seek:
@@ -235,39 +396,44 @@ public class MatchManager : MonoBehaviour
 
         switch (phase)
         {
-            case MatchPhase.Intro:
-                _phaseEndsAt = Time.time + introSeconds;
-                _title.text = _player.team == Team.Hunter ? "YOU ARE THE HUNTER!" : "YOU ARE A HIDER!";
+            case MatchPhase.Lobby:
+                _title.text = "WAITING FOR PLAYERS...";
+                _timer.text = "";
+                _info.text = "";
+                SetAllLocked(false);
+                _resultPanel.SetActive(false);
+                _rosterPanel.SetActive(true);
+                break;
+
+            case MatchPhase.Travel:
                 _timer.text = "";
                 SetAllLocked(true);
-                _curtain.SetActive(false);
-                _resultPanel.SetActive(false);
-                UpdateInfo();
                 break;
 
             case MatchPhase.Hide:
                 _phaseEndsAt = Time.time + hideSeconds;
-                _title.text = _player.team == Team.Hunter ? "WAIT FOR THE HIDERS" : "PAINT & HIDE!";
-                foreach (var ch in Characters)
-                    if (ch != null) ch.motor.movementLocked = ch.team == Team.Hunter;
-                _curtain.SetActive(_player.team == Team.Hunter);
+                _title.text = _player.team == Team.Hunter ? "THE HIDERS ARE HIDING" : "PAINT AND HIDE!";
+                SetAllLocked(false); // the hunter roams the lobby, hiders roam the map
+                _rosterPanel.SetActive(false);
+                UpdateInfo();
                 break;
 
             case MatchPhase.Seek:
                 _phaseEndsAt = Time.time + seekSeconds;
                 _title.text = _player.team == Team.Hunter ? "FIND THEM ALL!" : "DON'T GET FOUND!";
                 SetAllLocked(false);
-                _curtain.SetActive(false);
                 break;
 
             case MatchPhase.Result:
                 SetAllLocked(true);
-                _curtain.SetActive(false);
+                _rosterPanel.SetActive(false);
                 _resultPanel.SetActive(true);
                 _title.text = "";
                 _timer.text = "";
                 break;
         }
+
+        if (_rig != null) _rig.RefreshContextButton();
     }
 
     void EndMatch(string message)
@@ -287,6 +453,21 @@ public class MatchManager : MonoBehaviour
         if (_info != null) _info.text = "HIDERS LEFT  " + HidersLeft();
     }
 
+    void UpdateRoster()
+    {
+        if (_rosterText == null) return;
+        var sb = new System.Text.StringBuilder();
+        sb.Append("PLAYERS  ").Append(Characters.Count).Append("/").Append(totalCharacters).Append("\n");
+        foreach (var ch in Characters)
+        {
+            if (ch == null) continue;
+            sb.Append("\n").Append(ch.isPlayer ? "> YOU" : "  " + ch.displayName);
+            if (_volunteers.Contains(ch)) sb.Append("   [H]");
+        }
+        sb.Append("\n\n[H] = wants to hunt");
+        _rosterText.text = sb.ToString();
+    }
+
     // ---------------- HUD ----------------
 
     void BuildHUD()
@@ -303,16 +484,21 @@ public class MatchManager : MonoBehaviour
         _info = UiKit.MakeText(root, "", 40, TextAnchor.MiddleCenter);
         UiKit.SetRect(_info.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -195), new Vector2(-40, 60));
 
-        // Curtain shown to a human hunter while hiders hide
-        _curtain = new GameObject("Curtain", typeof(Image));
-        _curtain.transform.SetParent(root, false);
-        _curtain.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.07f, 0.97f);
-        UiKit.SetRect((RectTransform)_curtain.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-        _curtainText = UiKit.MakeText(_curtain.transform, "", 64, TextAnchor.MiddleCenter);
-        UiKit.SetRect(_curtainText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-        _curtain.SetActive(false);
+        // big centre banner for the hunter roulette / reveal moments
+        _banner = UiKit.MakeText(root, "", 84, TextAnchor.MiddleCenter);
+        UiKit.SetRect(_banner.rectTransform, new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 220), new Vector2(-40, 160));
 
-        // Result overlay
+        // lobby roster (top-right)
+        _rosterPanel = new GameObject("Roster", typeof(Image));
+        _rosterPanel.transform.SetParent(root, false);
+        _rosterPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.08f, 0.55f);
+        UiKit.SetRect((RectTransform)_rosterPanel.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1),
+            new Vector2(-24, -250), new Vector2(400, 160 + totalCharacters * 44));
+        _rosterText = UiKit.MakeText(_rosterPanel.transform, "", 34, TextAnchor.UpperLeft);
+        UiKit.SetRect(_rosterText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(6, -12), new Vector2(-48, -48));
+        _rosterPanel.SetActive(false);
+
+        // result overlay
         _resultPanel = new GameObject("Result", typeof(RectTransform));
         _resultPanel.transform.SetParent(root, false);
         UiKit.SetRect((RectTransform)_resultPanel.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
