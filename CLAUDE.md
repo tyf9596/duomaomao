@@ -77,6 +77,14 @@ for hiding *within* the hunter's line of sight.
   cardboard cluster at the alley's south mouth, roadworks cones around the firetruck,
   flatbed truck + climbable cargo boxes (bed y=0.61) by the N road, plush-bear pile at the
   NW bench, rainbow/stripe panels on the SE houses' BACK walls (long wall-rhythm runs).
+  **Crossroad Monument** (user request 2026-07-16): ~8.5m roundabout landmark at (0,0) —
+  5 stone cylinder tiers (StoneGray.mat, MeshColliders) + 7 patina-green `DecoyStatue`
+  figures built from scaled markers (marker localScale × the 0.5 body scale: caryatid
+  ring ×4 @0.87 Scarecrow backs to the column, sentinels ×2 @0.9 Statue on the mid tier,
+  crown figure @1.1 Scarecrow on top). Players painting themselves patina and posing on
+  the pedestal read as the 8th figure. Edit-mode preview verified (clip-sampled poses);
+  play-mode spawn NOT yet verified — was blocked by concurrent taunt/LOS work's compile
+  errors, re-verify once that lands.
   `ArenaMap` overrides: 9 characters, hide 50s, seek 210s,
   `floorNormalMinY 0.85` (no spawns on sloped house roofs)
 - `Assets/Game/Scenes/Arena04.unity` — 32×24m two-house map, kept as secondary
