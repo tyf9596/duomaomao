@@ -127,6 +127,7 @@ public class MatchManager : MonoBehaviour
         // hunter roulette — volunteers first, otherwise anyone
         Character hunter = PickHunter();
         SetAllLocked(true); // everyone freezes for the reveal
+        _rosterPanel.SetActive(false); // clear the stage for the banner
         yield return HunterRoulette(hunter);
         MakeHunter(hunter);
         _banner.text = hunter.isPlayer ? "YOU ARE THE HUNTER!" : hunter.displayName + " IS THE HUNTER!";

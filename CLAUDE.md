@@ -19,8 +19,16 @@ for hiding *within* the hunter's line of sight.
 
 - `Assets/Game/Scripts/Arena/` — **the real game** (all namespace-free, scenes stay dumb)
   - `MatchManager.cs` — bootstraps into any scene with an `ArenaMap` (also via a
-    `sceneLoaded` hook so PLAY AGAIN scene reloads restart matches); spawns 1 player +
-    N bots in code, random hunter, INTRO→HIDE→SEEK→RESULT, conversion + win logic, HUD
+    `sceneLoaded` hook so PLAY AGAIN scene reloads restart matches); phase flow
+    **LOBBY→TRAVEL→HIDE→SEEK→RESULT** (2026-07-16 lobby feature, mirrors the original):
+    everyone spawns in the LobbyRoom, bots trickle in like a matchmaking queue
+    (roster HUD top-right, `[H]` = volunteer), player volunteers via the context
+    button (HUNT?/HUNT!), hunter = roulette pick from volunteers (else anyone),
+    hiders teleport into the map behind a LoadingScreen while the **hunter waits in
+    the lobby** until hide time ends, then travels in with a red loading screen
+    ("HUNTER INCOMING!" warning for hiders); conversion + win logic, HUD. Lobby
+    pacing fields (joinInterval*, lobbyCountdownSeconds, travelSeconds,
+    botVolunteerChance) are public for tests/config
   - `Character.cs` — `Character.Create()` factory: CharacterController root + paintable
     capsule body child (MeshCollider = paint UVs + pellet hits) + googly eyes
   - `CharacterMotor.cs` — walk/dash/jump/wall-climb/pose (Stand/Crouch/Lie); drivers write
@@ -39,10 +47,18 @@ for hiding *within* the hunter's line of sight.
     (random blocky model, PaintableBody, animator pose; paint modes Stone / MatchGround
     two-point auto-camo / Stripes). Character-shaped scenery = doubt for hunters; decoys
     are NOT Characters, so bot hunters ignore them — they exist to fool humans
-  - `LobbyRoom.cs` — **WIP, not wired in yet** (left over from the 2026-07-15 session):
-    runtime-built matchmaking room floating high beside the map (patterned walls, crates,
-    invisible lid). `LobbyRoom.Build(map)` exists but nothing calls it — MatchManager
-    integration (spawn there, teleport hiders down on match start) is still to do
+  - `LobbyRoom.cs` — the matchmaking lobby, **wired in + play-verified 2026-07-16**:
+    runtime-built room floating 55m up / 42m west of the map (pattern walls = camo
+    teaser: rainbow N, B/W stripes S, warm/cool tiles E/W, checker floor, crates,
+    bench, "PAINT - HIDE - SURVIVE" TextMesh sign). Invisible lid (collider only)
+    stops wall-climbers, all renderers `ShadowCastingMode.Off` so the room doesn't
+    print a shadow on the map. `Build(map)` idempotent; `SpawnPoint()` for spawns
+  - `LoadingScreen.cs` — the travel overlay ("进地图读条"): paint-roller drags a
+    rainbow stroke as the progress bar (drips fall off passed sections, splats pop
+    around, tips rotate, drifting diagonal stripes bg); hunter variant runs in reds
+    ("THE HUNT BEGINS"). Opaque from frame 1 → teleports happen invisibly; ends in
+    white flash + fade. `LoadingScreen.Show(mapName, subtitle, seconds, hunterStyle)`,
+    self-destroys; map display names come from `MatchManager.MapDisplayName()`
   - `ThirdPersonCamera.cs`, `Shotgun.cs` (pellet cone, converts hiders), `PaintableBody.cs`
     (runtime tex, `FillCamo`, `AverageColor` for AI), `ArenaMap.cs` (marker + floor sampling),
     `UiKit.cs` (runtime UI helpers + HoldButton)
@@ -114,6 +130,9 @@ for hiding *within* the hunter's line of sight.
   blocky skins have small per-face UV islands, fat brushes flood a whole face), **hunters are
   first-person** (`ThirdPersonCamera.firstPerson`, own renderers hidden, fire from camera),
   and aiming lives on an arms-only Animator layer (`ArmsMask`) so legs keep walking.
+  Since the lobby feature: FPS only during SEEK/RESULT (`PlayerRig.UpdateViewMode`) — in
+  the lobby the hunter stays third-person to see themselves turn red and get the gun;
+  camera near plane clamped to 0.05 so FPS doesn't clip into walls you stand against.
 - Gesture rules: strokes starting on a paintable body belong to the brush; gestures starting
   over UI belong to UI (`UiGuard`); everything else is camera.
 - ASCII-only UI labels (LegacyRuntime.ttf tofu risk on device).
@@ -144,7 +163,8 @@ Principles worth copying:
 - `.mcp.json` = uvx `mcpforunityserver==9.7.1`; editor package pinned in manifest.
 - **The editor barely pumps play-mode frames without OS focus** (frameCount freezes; MCP
   still works because it pumps the main thread per command). For play tests: run
-  `scratchpad/focus-unity.ps1 -WaitSeconds N` (SetForegroundWindow + Alt-tap workaround),
+  `Tools/focus-unity.ps1 -WaitSeconds N` (SetForegroundWindow + Alt-tap workaround;
+  checked into the repo so it survives sessions),
   or ask the user to click Unity. Console **Error Pause must stay off** — MCP bridge logs
   socket errors that otherwise pause play instantly (disable: `LogEntries.SetConsoleFlag(4,false)`).
 - Don't request script compiles while in play mode — the mid-play domain reload wipes
@@ -184,6 +204,12 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
   (Scarecrow/Chair/Sit/Static states confirmed), zebra mannequin + tile-plaza auto-camo
   sitter look right in screenshots, bots settle/patrol normally around the new clutter,
   zero game errors in console.
+- Lobby flow (2026-07-16, 4 play runs on Arena05, screenshot-verified): staggered bot
+  joins + roster + [H] markers, HUNT? volunteer toggle, roulette (roster hides for the
+  reveal), rainbow loading screen for hiders / red one for the hunter, hunter waits in
+  the lobby third-person (WAIT button, "SEEK IN n"), teleports (CC disable/enable) land
+  everyone on the map, in-play scene reload (PLAY AGAIN path) restarts the whole lobby
+  loop cleanly. Player verified on BOTH teams end-to-end.
 
 ## Roadmap (reordered 2026-07-14: user wants rich, good-looking levels first)
 
@@ -195,6 +221,7 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
 3. Hider fun: taunt button (emote-yes/no clips are imported already!), respot-during-seek
    risk, points for line-of-sight hiding (the Steam game's signature scoring),
    spectate-after-conversion
-4. Match config screen (bot count, timers); SFX/juice (shot, conversion sting, win fanfare)
+4. Match config screen (bot count, timers — natural home: the lobby, whose pacing fields
+   are already public); SFX/juice (shot, conversion sting, win fanfare)
 5. Android build via `unity-android-release` skill; then real netcode (NGO or Photon) to
    replace bots with players

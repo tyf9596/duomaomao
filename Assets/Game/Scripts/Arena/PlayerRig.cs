@@ -48,9 +48,21 @@ public class PlayerRig : MonoBehaviour
     public void SetTeam(Team team)
     {
         if (_paint != null && _paint.Active) _paint.Exit();
-        if (_crosshair != null) _crosshair.SetActive(team == Team.Hunter);
         RefreshContextButton();
-        SetFirstPerson(team == Team.Hunter); // hunters aim like a normal FPS
+        UpdateViewMode();
+    }
+
+    /// <summary>
+    /// Hunters aim like a normal FPS, but only once the hunt is actually on — in the
+    /// lobby (including the wait while hiders hide) they stay third-person so they
+    /// can see themselves turn red and shoulder the gun.
+    /// </summary>
+    void UpdateViewMode()
+    {
+        bool fps = self != null && self.team == Team.Hunter && match != null
+            && (match.Phase == MatchPhase.Seek || match.Phase == MatchPhase.Result);
+        if (_crosshair != null) _crosshair.SetActive(fps);
+        SetFirstPerson(fps);
     }
 
     /// <summary>
@@ -66,6 +78,11 @@ public class PlayerRig : MonoBehaviour
             _actionLabel.text = v ? "HUNT!" : "HUNT?";
             _actionBg.color = v ? new Color(0.75f, 0.22f, 0.18f, 0.9f) : new Color(0.35f, 0.35f, 0.4f, 0.85f);
         }
+        else if (match != null && match.Phase != MatchPhase.Seek && self.team == Team.Hunter)
+        {
+            _actionLabel.text = "WAIT";
+            _actionBg.color = new Color(0.35f, 0.35f, 0.4f, 0.85f);
+        }
         else if (self.team == Team.Hunter)
         {
             _actionLabel.text = "SHOOT";
@@ -76,6 +93,7 @@ public class PlayerRig : MonoBehaviour
             _actionLabel.text = "PAINT";
             _actionBg.color = new Color(0.24f, 0.5f, 0.75f, 0.85f);
         }
+        UpdateViewMode(); // phase changes can flip hunter FPS on/off
     }
 
     void SetFirstPerson(bool on)
@@ -214,6 +232,14 @@ public class PlayerRig : MonoBehaviour
 
     void OnAction()
     {
+        // in the lobby the context button is the hunter-volunteer toggle
+        if (match != null && match.Phase == MatchPhase.Lobby)
+        {
+            match.ToggleVolunteer(self);
+            RefreshContextButton();
+            return;
+        }
+
         if (self.team == Team.Hider)
         {
             if (match != null && match.Phase != MatchPhase.Hide && match.Phase != MatchPhase.Seek) return;

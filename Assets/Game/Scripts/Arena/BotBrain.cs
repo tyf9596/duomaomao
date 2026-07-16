@@ -14,6 +14,7 @@ public class BotBrain : MonoBehaviour
     public Character self;
     public MatchManager match;
     public ArenaMap map;
+    public LobbyRoom lobby; // where we mill about before the match (and hunters wait)
     public Shotgun gun; // set when on the hunter team
 
     [Header("Hunting")]
@@ -40,9 +41,12 @@ public class BotBrain : MonoBehaviour
 
         switch (match.Phase)
         {
+            case MatchPhase.Lobby:
+                LobbyBehavior();
+                break;
             case MatchPhase.Hide:
                 if (self.team == Team.Hider) HideBehavior();
-                else Idle();
+                else LobbyBehavior(); // the hunter waits upstairs in the lobby
                 break;
             case MatchPhase.Seek:
                 if (self.team == Team.Hunter) HuntBehavior();
@@ -57,6 +61,40 @@ public class BotBrain : MonoBehaviour
     void Idle()
     {
         self.motor.desiredMove = Vector3.zero;
+    }
+
+    // ---------------- lobby ----------------
+
+    float _lobbyNextAt;
+    bool _lobbyIdling;
+    Vector3 _lobbyTarget;
+
+    /// <summary>Mill about the lobby: short walks, pauses, the odd pose or hop.</summary>
+    void LobbyBehavior()
+    {
+        if (lobby == null) { Idle(); return; }
+
+        if (Time.time >= _lobbyNextAt)
+        {
+            _lobbyNextAt = Time.time + Random.Range(1.6f, 4f);
+            _lobbyIdling = Random.value < 0.35f;
+            if (_lobbyIdling)
+            {
+                if (Random.value < 0.5f) self.motor.SetPose((Pose)Random.Range(0, 6));
+            }
+            else
+            {
+                _lobbyTarget = lobby.SpawnPoint();
+            }
+        }
+
+        if (_lobbyIdling) { Idle(); return; }
+
+        Vector3 flat = _lobbyTarget - transform.position;
+        flat.y = 0f;
+        if (flat.magnitude < 0.4f) { Idle(); return; }
+        Steer(_lobbyTarget);
+        if (Random.value < 0.002f) self.motor.wantJumpPressed = true;
     }
 
     // ---------------- hider ----------------

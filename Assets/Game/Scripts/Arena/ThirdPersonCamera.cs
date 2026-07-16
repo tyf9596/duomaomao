@@ -22,7 +22,13 @@ public class ThirdPersonCamera : MonoBehaviour
 
     float _currentDistance;
 
-    void Awake() { _currentDistance = distance; }
+    void Awake()
+    {
+        _currentDistance = distance;
+        // tight near plane so first-person view doesn't clip into walls you stand against
+        var cam = GetComponent<Camera>();
+        if (cam != null) cam.nearClipPlane = Mathf.Min(cam.nearClipPlane, 0.05f);
+    }
 
     public void AddLook(Vector2 pixelDelta)
     {

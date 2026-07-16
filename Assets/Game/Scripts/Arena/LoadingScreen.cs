@@ -67,10 +67,10 @@ public class LoadingScreen : MonoBehaviour
             var s = new GameObject("Stripe", typeof(Image));
             s.transform.SetParent(root, false);
             var img = s.GetComponent<Image>();
-            img.color = new Color(1f, 1f, 1f, 0.045f);
+            img.color = new Color(1f, 1f, 1f, 0.028f);
             img.raycastTarget = false;
             var rt = (RectTransform)s.transform;
-            Center(rt, new Vector2(0f, -900f + i * 360f), new Vector2(2600f, 110f));
+            Center(rt, new Vector2(0f, -900f + i * 360f), new Vector2(2600f, 80f));
             rt.localRotation = Quaternion.Euler(0f, 0f, 18f);
             _stripes[i] = rt;
         }
