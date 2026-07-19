@@ -14,24 +14,44 @@ public class ArenaMap : MonoBehaviour
     [Header("Spawn sampling")]
     [Tooltip("Minimum surface normal Y for a valid floor point — raise to exclude sloped roofs.")]
     public float floorNormalMinY = 0.7f;
+    [Tooltip("Reject floor points above this height — keeps spawns off unreachable rooftops on multi-storey maps.")]
+    public float maxSpawnY = 100f;
 
     [Header("Match overrides (0 = MatchManager default)")]
     public int characterCountOverride;
     public float hideSecondsOverride;
     public float seekSecondsOverride;
 
-    /// <summary>Random position on the floor inside the play area (raycast down onto geometry).</summary>
+    static readonly RaycastHit[] SpawnBuf = new RaycastHit[16];
+
+    /// <summary>
+    /// Random position on a floor inside the play area. The ray pierces ALL geometry in
+    /// the column and picks a random valid storey (reservoir sample), so basements,
+    /// ground floors, upper floors and balconies all receive spawns. A point is valid
+    /// when it faces up, sits below maxSpawnY (rooftops), and has standing headroom.
+    /// </summary>
     public Vector3 RandomPointOnFloor()
     {
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 24; i++)
         {
             var p = new Vector3(
                 areaCenter.x + (Random.value - 0.5f) * areaSize.x,
-                areaCenter.y + 8f,
+                areaCenter.y + 24f,
                 areaCenter.z + (Random.value - 0.5f) * areaSize.y);
-            RaycastHit hit;
-            if (Physics.Raycast(p, Vector3.down, out hit, 16f) && hit.normal.y > floorNormalMinY)
-                return hit.point;
+            int n = Physics.RaycastNonAlloc(new Ray(p, Vector3.down), SpawnBuf, 40f);
+            int picked = -1, seen = 0;
+            for (int h = 0; h < n; h++)
+            {
+                var hit = SpawnBuf[h];
+                if (hit.normal.y <= floorNormalMinY) continue;
+                if (hit.point.y > maxSpawnY) continue;
+                // a character must fit standing here (rejects wall tops under ceilings,
+                // closed voids, and points inside furniture)
+                if (Physics.CheckCapsule(hit.point + Vector3.up * 0.45f, hit.point + Vector3.up * 1.1f, 0.2f)) continue;
+                seen++;
+                if (Random.Range(0, seen) == 0) picked = h;
+            }
+            if (picked >= 0) return SpawnBuf[picked].point;
         }
         return areaCenter; // pathological fallback
     }

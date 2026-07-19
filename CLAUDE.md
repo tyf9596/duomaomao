@@ -71,7 +71,11 @@ for hiding *within* the hunter's line of sight.
     white flash + fade. `LoadingScreen.Show(mapName, subtitle, seconds, hunterStyle)`,
     self-destroys; map display names come from `MatchManager.MapDisplayName()`
   - `ThirdPersonCamera.cs`, `Shotgun.cs` (pellet cone, converts hiders), `PaintableBody.cs`
-    (runtime tex, `FillCamo`, `AverageColor` for AI), `ArenaMap.cs` (marker + floor sampling),
+    (runtime tex, `FillCamo`, `AverageColor` for AI), `ArenaMap.cs` (marker + floor
+    sampling — since 2026-07-19 `RandomPointOnFloor` PIERCES all geometry in the column
+    and reservoir-picks a random valid storey: normal.y filter + `maxSpawnY` rooftop cap
+    + 1.3m-headroom capsule check, so basements/upper floors get spawns while wall tops,
+    closed voids and furniture interiors are rejected on every map),
     `UiKit.cs` (runtime UI helpers + HoldButton)
 - `Assets/Game/Scripts/Game/` — OLD pass-and-play demo (ChameleonPainter/GameFlow/PaintUI…);
   still works in Diorama01; `PaintUI.EnsureEventSystem` is reused by the arena code
@@ -99,28 +103,33 @@ for hiding *within* the hunter's line of sight.
   `ArenaMap` overrides: 9 characters, hide 50s, seek 210s,
   `floorNormalMinY 0.85` (no spawns on sloped house roofs)
 - `Assets/Game/Scenes/Arena06.unity` — **second map "The Mansion"** (48×42m, in build
-  settings, built 2026-07-19 from the indoor-map principles): roofless dollhouse mansion
-  (third-person camera never fights ceilings; matches the original's diorama look).
-  Interior 40×28: checker **ballroom** with stage + CurtainRed backdrop (0.55m hideable
-  lane behind the curtain) + **U-mezzanine** (y2.2, two 8-step stairs, bridge over the
-  stage at y2.4) + B/W stripe panels under the mezz; parquet **library** (bookcase lanes,
-  brick **fireplace you can stand in**); TileBlue **kitchen**+pantry (counter run, island,
-  walk-in **pantry closet**); WoodWarm **dining** (long table, 8-chair family, Food Kit
-  plates); CarpetRose **bedroom** (beds, bear pile, 2 walk-in **wardrobes**); TileGrout
-  **bathroom** (2 tubs — jump in + Lie pose hides below the rim); concrete **storage**
-  (crate rows/stacks, 4 open **lockers**, **crate fort** with 0.7m slot + roof crate);
-  wallpaper hallways; south courtyard (fountain + big patina statue, hedge rows, flower
-  path, benches) + grass perimeter strips w/ hedge ring. **Crawl-in spots: lockers,
-  wardrobes, pantry, fireplace, under-stair dens (skirted), crate fort, tubs, curtain
-  lane.** Closet/locker tops are tilted 33° (normal.y<0.85) so spawn sampling rejects
-  them. 6 DecoyStatues: big patina fountain statue (scaled marker), stage Scarecrow,
-  wardrobe mannequin, library Bend by the fireplace, storage Ball (auto-camo), mezzanine
-  Chair sitter. Pattern floors are per-room .mat tiling VARIANTS (cube UVs are 0..1 per
+  settings, built 2026-07-19; verticalized same day at user request: **basement + ground
+  floor + 2nd floor + full roof/ceilings**). GROUND (40×28 interior): checker **ballroom**,
+  now double-height with a stage + CurtainRed backdrop (0.55m lane behind) and a
+  **balcony level at y3.2** (two 12-step stairs w/ big under-stair dens, bridge over the
+  stage, B/W stripe panels below); parquet **library** (bookcase lanes, walk-in brick
+  fireplace); TileBlue **kitchen**+pantry (counter run, island, pantry closet) with a
+  **stairwell down**; tall WoodWarm **dining** (table + 8-chair + plate families);
+  CarpetRose **bedroom** (2 wardrobes), TileGrout **bathroom** (lie inside the tubs);
+  double-height concrete **storage** (crate rows, 4 lockers, crate fort) with the second
+  **stairwell down**. 2ND FLOOR (west wing + east wing, floors 3.2..3.49, connected via
+  the ballroom balcony): office **study** (desks/PCs — Backrooms vibe), **kids room**
+  (beds, bear pile on rug), junk **attic** (cardboard/crate clutter, Dead-pose mannequin
+  decoy), **master suite** (walk-in wardrobe) + **lounge**. BASEMENT (28×18 brick, floor
+  −3.0, dim point lights = the Sewer-style silhouette zone): **wine cellar** (barrel
+  family ×8 + a lying decoy), central corridor, **boiler room** (tank + pipes + crates),
+  plus a **1.45m air-duct crawl** secretly linking cellar↔corridor. Roof slab at 6.4;
+  interiors lit by ~19 point lights + flat ambient 0.45. Crawl-ins: lockers, wardrobes
+  ×3, pantry, fireplace, under-stair dens, crate fort, tubs, curtain lane, air duct.
+  8 DecoyStatues total. Sloped closet/locker tops (33°) + `maxSpawnY 5` keep spawns off
+  tops/roof. Pattern floors are per-room .mat tiling VARIANTS (cube UVs are 0..1 per
   face — bake tiling into `Patterns/<name>_<size>.mat`). `ArenaMap`: 10 chars, hide 55s,
-  seek 240s, floorNormalMinY 0.85. Play-verified 2026-07-19: lobby→travel→hide→seek,
-  decoys 6/6, bot painted itself CarpetRose IN the bedroom, grass bots exact-matched
-  GrassGreen, infection cascade ran, zero errors. Known quirks: bots mostly favor the
-  outdoor strips (uniform sampling), spawn can rarely land on wall tops (~3%).
+  seek 240s, floorNormalMinY 0.85. Play-verified 2026-07-19 (both passes): hiders
+  teleport onto ALL levels (2 straight into the basement — they self-painted concrete
+  gray, one took the Lie pose next to the cellar decoy), bedroom bot matched CarpetRose,
+  spawn sampling 300-shot audit = 9% basement / 72% ground / 17% upper / 0 roof, zero
+  errors. Known quirks: bots path between floors only by accident (stuck-repick), so
+  basement hunting pressure is low for bots; humans must check it.
 - `Assets/Game/Scenes/Arena04.unity` — 32×24m two-house map, kept as secondary
 - `Assets/Game/Scenes/Arena03.unity` — smaller first kit map (16×12m), kept as tertiary
 - `Assets/Game/Scenes/Diorama02.unity` — small test arena (BuildingKit slice, same wiring)
