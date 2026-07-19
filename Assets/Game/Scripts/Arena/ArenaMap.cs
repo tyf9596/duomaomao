@@ -22,7 +22,8 @@ public class ArenaMap : MonoBehaviour
     public float hideSecondsOverride;
     public float seekSecondsOverride;
 
-    static readonly RaycastHit[] SpawnBuf = new RaycastHit[16];
+    // 32: one column through the Mansion can cross roof + 2 floors + furniture + basement
+    static readonly RaycastHit[] SpawnBuf = new RaycastHit[32];
 
     /// <summary>
     /// Random position on a floor inside the play area. The ray pierces ALL geometry in
