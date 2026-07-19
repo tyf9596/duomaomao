@@ -250,6 +250,14 @@ Principles worth copying:
   missing** from captures; verify UI via hierarchy/execute_code instead.
 - execute_code compiles with CodeDom (C#6): no `?.` on Unity objects habit anyway, and use
   `UnityEngine.Object.DestroyImmediate` (bare `Object` is ambiguous).
+- **⚠ 2026-07-19 (PM/QA): `execute_code` is BROKEN since the netcode packages landed** —
+  CodeDom's mono.exe invocation now exceeds the Windows command-line length limit
+  ("文件名或扩展名太长", the reference list grew with NGO/Multiplayer SDK assemblies), and
+  the `compiler:"roslyn"` fallback needs Microsoft.CodeAnalysis which isn't installed.
+  Until fixed: use file-based script workflows + built-in MCP tools (manage_scene /
+  manage_gameobject / manage_components / read_console / manage_editor). Fix options are
+  with the user (install Microsoft.CodeAnalysis, or bump the MCP package if it gains
+  response-file support).
 
 ## Offline compile check (no Unity focus needed)
 
