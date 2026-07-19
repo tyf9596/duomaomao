@@ -173,7 +173,9 @@ for hiding *within* the hunter's line of sight.
   cycleOffset 0.5 = frozen mid-stoop). Pose int drives animator; movement breaks the
   pose. Touch UI: POSE button opens a 2-column 9-option picker (PlayerRig `_posePanel`);
   editor P key cycles. All animator states play-verified 2026-07-16. **Idle state speed
-  is 0.2** in the controller — the clip's heavy breathing ruined posed hiding.
+  is 0** in the controller (user call 2026-07-19) — standing characters hold the idle
+  clip's entry frame perfectly still; the breathing clip ruined posed hiding. Same
+  freeze trick as Bend (state speed 0), so walk/run transitions still blend normally.
 - Character skins are **pure white, no source texture, no eyes** (user call 2026-07-14).
   The Kenney blocky FBX UVs are unusable for painting (mirrored limbs, shared verts, and
   the head is a 10x mesh on a 0.1x bone), so `PaintableBody` REBUILDS UVs at runtime:
