@@ -122,7 +122,16 @@ for hiding *within* the hunter's line of sight.
   interiors lit by ~19 point lights + flat ambient 0.45. Crawl-ins: lockers, wardrobes
   ×3, pantry, fireplace, under-stair dens, crate fort, tubs, curtain lane, air duct.
   8 DecoyStatues total. Sloped closet/locker tops (33°) + `maxSpawnY 5` keep spawns off
-  tops/roof. Pattern floors are per-room .mat tiling VARIANTS (cube UVs are 0..1 per
+  tops/roof. **Art pass 2026-07-19** (user feedback: too empty/monotone, bare ceilings,
+  no graffiti, clipping): coffered-ceiling skins (`CeilingCoffer` texture) + wood beams
+  in every room; 10 graffiti walls from 3 generated irregular textures (`SplatMural`
+  paint splats w/ drips, `DoodleArcs` scribbles on dark, `RainbowDrip` dripping bands) —
+  ballroom under-balcony, storage, basement corridor, attic, kids room, and two 10m
+  murals on the courtyard face; set pieces: **grand piano** (ballroom), 4 **balloon
+  bunches**, **pool table** w/ colored balls (lounge), 7 framed paintings, toy-block
+  scatter (kids), **clothesline w/ colored towels** (basement), wine bottles on barrels,
+  fruit on tables, 4 crates recolored red/blue/green; dining table/chair clipping fixed
+  (desks split, chairs pulled out). Pattern floors are per-room .mat tiling VARIANTS (cube UVs are 0..1 per
   face — bake tiling into `Patterns/<name>_<size>.mat`). `ArenaMap`: 10 chars, hide 55s,
   seek 240s, floorNormalMinY 0.85. Play-verified 2026-07-19 (both passes): hiders
   teleport onto ALL levels (2 straight into the basement — they self-painted concrete
@@ -169,10 +178,21 @@ for hiding *within* the hunter's line of sight.
   procedural, offset scales with rig) / Scarecrow(holding-both) / Chair(drive clip) /
   **Ball**(sit clip + procedural hands-on-head bone offsets in `CharacterMotor.LateUpdate`
   — head +45°X, arms Euler(-165,0,±30) folding INWARD, tuned visually) / **Dead**(die
-  clip, freezes crumpled on last frame) / **Bend**(pick-up clip, state speed 0 +
-  cycleOffset 0.5 = frozen mid-stoop). Pose int drives animator; movement breaks the
-  pose. Touch UI: POSE button opens a 2-column 9-option picker (PlayerRig `_posePanel`);
-  editor P key cycles. All animator states play-verified 2026-07-16. **Idle state speed
+  clip, freezes crumpled on last frame) / **Bend**(plays `Resources/BendHold.anim`, a
+  1-frame clip baked from pick-up's deepest-stoop phase — **cycleOffset does NOTHING
+  when state speed is 0**, the freeze never left frame 0, so bake a hold clip instead).
+  Pose int drives animator; movement breaks the pose. Touch UI: POSE button opens a
+  2-column 9-option picker (PlayerRig `_posePanel`); editor P key cycles.
+  **2026-07-19 pose regression fixed**: an importer pass had left every clip's Root
+  Transform un-baked (`lockRootRotation/PositionXZ/HeightY = false`) — on Generic rigs
+  the root node's translation is then EXTRACTED as root motion and discarded
+  (applyRootMotion=false), so sit/crouch/ball couldn't lower the body and "poses did
+  nothing, characters just stood" (user report). All 18 FBX importers now bake all
+  three root channels into the pose; walk/sprint are authored in place so nothing
+  slides. All 9 poses re-verified visually in play (decoy line-up screenshots).
+  `DecoyStatue` builds in **Start** (not Awake) so runtime spawners can AddComponent +
+  set fields on the same frame — Awake fired before field assignment and every
+  runtime decoy silently used default Statue/Stone. **Idle state speed
   is 0** in the controller (user call 2026-07-19) — standing characters hold the idle
   clip's entry frame perfectly still; the breathing clip ruined posed hiding. Same
   freeze trick as Bend (state speed 0), so walk/run transitions still blend normally.

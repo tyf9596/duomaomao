@@ -21,7 +21,9 @@ public class DecoyStatue : MonoBehaviour
 
     static readonly RaycastHit[] HitBuf = new RaycastHit[16];
 
-    void Awake()
+    // Built in Start (not Awake) so runtime spawners can AddComponent + set fields
+    // on the same frame — scene-placed markers behave identically either way.
+    void Start()
     {
         // Sample the ground first, while this object still has no colliders of its own.
         Color g1, g2;

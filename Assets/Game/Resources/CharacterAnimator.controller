@@ -170,8 +170,8 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Bend
-  m_Speed: 0
-  m_CycleOffset: 0.5
+  m_Speed: 1
+  m_CycleOffset: 0
   m_Transitions:
   - {fileID: -5332418151816252689}
   m_StateMachineBehaviours: []
@@ -183,7 +183,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: -7514621445249138877, guid: 60b775275dddef545beeb07d6bb34edb, type: 3}
+  m_Motion: {fileID: 7400000, guid: b42e8cd2c3f131f49a330cf38b63785d, type: 2}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 
