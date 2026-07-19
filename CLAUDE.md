@@ -98,6 +98,29 @@ for hiding *within* the hunter's line of sight.
   errors, re-verify once that lands.
   `ArenaMap` overrides: 9 characters, hide 50s, seek 210s,
   `floorNormalMinY 0.85` (no spawns on sloped house roofs)
+- `Assets/Game/Scenes/Arena06.unity` — **second map "The Mansion"** (48×42m, in build
+  settings, built 2026-07-19 from the indoor-map principles): roofless dollhouse mansion
+  (third-person camera never fights ceilings; matches the original's diorama look).
+  Interior 40×28: checker **ballroom** with stage + CurtainRed backdrop (0.55m hideable
+  lane behind the curtain) + **U-mezzanine** (y2.2, two 8-step stairs, bridge over the
+  stage at y2.4) + B/W stripe panels under the mezz; parquet **library** (bookcase lanes,
+  brick **fireplace you can stand in**); TileBlue **kitchen**+pantry (counter run, island,
+  walk-in **pantry closet**); WoodWarm **dining** (long table, 8-chair family, Food Kit
+  plates); CarpetRose **bedroom** (beds, bear pile, 2 walk-in **wardrobes**); TileGrout
+  **bathroom** (2 tubs — jump in + Lie pose hides below the rim); concrete **storage**
+  (crate rows/stacks, 4 open **lockers**, **crate fort** with 0.7m slot + roof crate);
+  wallpaper hallways; south courtyard (fountain + big patina statue, hedge rows, flower
+  path, benches) + grass perimeter strips w/ hedge ring. **Crawl-in spots: lockers,
+  wardrobes, pantry, fireplace, under-stair dens (skirted), crate fort, tubs, curtain
+  lane.** Closet/locker tops are tilted 33° (normal.y<0.85) so spawn sampling rejects
+  them. 6 DecoyStatues: big patina fountain statue (scaled marker), stage Scarecrow,
+  wardrobe mannequin, library Bend by the fireplace, storage Ball (auto-camo), mezzanine
+  Chair sitter. Pattern floors are per-room .mat tiling VARIANTS (cube UVs are 0..1 per
+  face — bake tiling into `Patterns/<name>_<size>.mat`). `ArenaMap`: 10 chars, hide 55s,
+  seek 240s, floorNormalMinY 0.85. Play-verified 2026-07-19: lobby→travel→hide→seek,
+  decoys 6/6, bot painted itself CarpetRose IN the bedroom, grass bots exact-matched
+  GrassGreen, infection cascade ran, zero errors. Known quirks: bots mostly favor the
+  outdoor strips (uniform sampling), spawn can rarely land on wall tops (~3%).
 - `Assets/Game/Scenes/Arena04.unity` — 32×24m two-house map, kept as secondary
 - `Assets/Game/Scenes/Arena03.unity` — smaller first kit map (16×12m), kept as tertiary
 - `Assets/Game/Scenes/Diorama02.unity` — small test arena (BuildingKit slice, same wiring)
@@ -106,7 +129,8 @@ for hiding *within* the hunter's line of sight.
   original, 2m grid, wall 2.4h), `FurnitureKit` (**10× oversized — place at scale 0.25**),
   `NatureKit` (small — trees/rocks at scale 2–3), `SuburbanKit`/`RoadKit` (miniature —
   **place at scale 7**; 21 whole houses building-type-a..u, 1×1 road tiles), `CarKit`
-  (real-world scale — place at 1). Source: user's local Kenney All-in-1 3.4.0 at
+  (real-world scale — place at 1), `FoodKit` (cartoon-oversized — **place at 0.35**;
+  added 2026-07-19 for Mansion kitchen/dining clutter). Source: user's local Kenney All-in-1 3.4.0 at
   `C:\ClaudeWorkSpace\Assets\Kenney Game Assets All-in-1 3.4.0` (50 more 3D kits there:
   Castle, Fantasy Town, Pirate, Graveyard, City Commercial/Industrial… for future maps).
   URP materials auto-generated on import.

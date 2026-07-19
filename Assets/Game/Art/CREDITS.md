@@ -34,3 +34,8 @@
 - 来源：Kenney Game Assets All-in-1 3.4.0（用户本地包，kenney.nl）
 - 授权：**CC0**
 - 位置：`Assets/Game/Art/Kits/SuburbanKit|RoadKit|CarKit/`（CarKit 已剔除 debris/kart 系列）
+
+## Food Kit（厨房/餐桌道具）— 2026-07-19
+- 来源：Kenney Game Assets All-in-1 3.4.0（用户本地包，kenney.nl）
+- 授权：**CC0**
+- 位置：`Assets/Game/Art/Kits/FoodKit/`（卡通夸张比例 — **放置缩放 0.35**）
