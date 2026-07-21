@@ -8,7 +8,8 @@ public enum Pose { Stand, Crouch, Statue, Lie, Scarecrow, Chair, Ball, Dead, Ben
 /// <summary>
 /// Input-agnostic character movement: walk, dash, jump, wall-climb and posing.
 /// A driver (PlayerRig or BotBrain) writes the desired* fields every frame;
-/// the motor consumes them here. Movement input breaks the current pose.
+/// the motor consumes them here. Poses PERSIST while moving (the original game's
+/// waddling-statue comedy) — only picking NORMAL/Stand restores locomotion anims.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class CharacterMotor : MonoBehaviour
@@ -33,8 +34,13 @@ public class CharacterMotor : MonoBehaviour
     [HideInInspector] public bool wantDash;         // edge-triggered
     [HideInInspector] public bool wantJumpHold;     // held: climb on walls, jump on press
     [HideInInspector] public bool wantJumpPressed;  // edge-triggered
-    [HideInInspector] public bool movementLocked;   // paint mode / hunter waiting
+    [HideInInspector] public bool movementLocked;   // phase locks (travel, reveal, result) — server-driven online
+    [HideInInspector] public bool paintLocked;      // local self-paint freeze (kept apart so net locks can't clobber it)
     [HideInInspector] public bool faceLocked;       // first-person: the driver owns facing
+
+    // --- network proxy: a replica driven by NetworkTransform, not by simulation ---
+    [HideInInspector] public bool proxyMode;        // true on every peer that doesn't own this character
+    [HideInInspector] public float proxySpeed;      // measured travel speed, feeds the animator
 
     public Pose CurrentPose { get; private set; } = Pose.Stand;
     public bool IsDashing => Time.time < _dashUntil;
@@ -53,17 +59,29 @@ public class CharacterMotor : MonoBehaviour
     void Awake()
     {
         _cc = GetComponent<CharacterController>();
-        if (body != null)
-        {
-            _bodyBasePos = body.localPosition;
-            _bodyBaseRot = body.localRotation;
-            _bodyBaseScale = body.localScale;
-        }
+        RecacheBodyBase();
+    }
+
+    /// <summary>Re-read the body's rest transform — call after resizing the rig
+    /// (hider/hunter scales differ) so procedural poses use the right offsets.</summary>
+    public void RecacheBodyBase()
+    {
+        if (body == null) return;
+        _bodyBasePos = body.localPosition;
+        _bodyBaseRot = body.localRotation;
+        _bodyBaseScale = body.localScale;
     }
 
     void Update()
     {
-        if (movementLocked)
+        if (proxyMode)
+        {
+            // the owner simulates; NetworkTransform moves us — no gravity, no input
+            ConsumeEdges();
+            return;
+        }
+
+        if (movementLocked || paintLocked)
         {
             // stay grounded but ignore all input
             _velocity.x = 0f; _velocity.z = 0f;
@@ -76,9 +94,6 @@ public class CharacterMotor : MonoBehaviour
 
         Vector3 move = desiredMove;
         if (move.sqrMagnitude > 1f) move.Normalize();
-
-        // Any real movement input breaks a pose.
-        if (move.sqrMagnitude > 0.1f && CurrentPose != Pose.Stand) SetPose(Pose.Stand);
 
         // Dash
         if (wantDash && Time.time >= _dashReadyAt && move.sqrMagnitude > 0.01f)
@@ -122,9 +137,18 @@ public class CharacterMotor : MonoBehaviour
     void LateUpdate()
     {
         if (anim == null) return;
-        Vector3 v = _cc.velocity;
-        v.y = 0f;
-        anim.SetFloat("Speed", v.magnitude);
+        float speed;
+        if (proxyMode)
+        {
+            speed = proxySpeed; // replicas: measured from the interpolated transform
+        }
+        else
+        {
+            Vector3 v = _cc.velocity;
+            v.y = 0f;
+            speed = v.magnitude;
+        }
+        anim.SetFloat("Speed", speed);
         anim.SetInteger("Pose", (int)CurrentPose);
 
         // Ball: sit clip + procedural hands-on-head (runs after the animator wrote bones;
@@ -172,10 +196,23 @@ public class CharacterMotor : MonoBehaviour
     /// <summary>Play the taunt emote (points + noise handled by MatchManager.DoTaunt).</summary>
     public bool Taunt()
     {
+        if (!TryConsumeTaunt()) return false;
+        PlayTauntAnim();
+        return true;
+    }
+
+    /// <summary>Cooldown gate only — the server consumes it, then broadcasts the visuals.</summary>
+    public bool TryConsumeTaunt()
+    {
         if (!CanTaunt) return false;
         _tauntReadyAt = Time.time + tauntCooldown;
-        if (anim != null) anim.SetTrigger("Taunt");
         return true;
+    }
+
+    /// <summary>Visual half of a taunt; safe to call on any peer.</summary>
+    public void PlayTauntAnim()
+    {
+        if (anim != null) anim.SetTrigger("Taunt");
     }
 
     void ConsumeEdges()

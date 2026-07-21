@@ -78,7 +78,7 @@ public class SelfPaintMode : MonoBehaviour
     {
         if (Active) return;
         Active = true;
-        _self.motor.movementLocked = true;
+        _self.motor.paintLocked = true;
         // hold the pose completely still — a breathing idle makes fine painting impossible
         _pausedAnim = _self.motor.anim;
         if (_pausedAnim != null) _pausedAnim.speed = 0f;
@@ -92,7 +92,7 @@ public class SelfPaintMode : MonoBehaviour
     {
         if (!Active) return;
         Active = false;
-        _self.motor.movementLocked = false;
+        _self.motor.paintLocked = false;
         if (_pausedAnim != null) _pausedAnim.speed = 1f;
         _pausedAnim = null;
         _cam.paintMode = false;
@@ -164,7 +164,7 @@ public class SelfPaintMode : MonoBehaviour
                 _stroke = true;
                 _lastUV = hit.textureCoord;
                 _hasLastUV = true;
-                _self.skin.PaintAt(hit.textureCoord, _brush, UvRadiusFor(hit), _hardness);
+                _self.SkinPaintAt(hit.textureCoord, _brush, UvRadiusFor(hit), _hardness);
             }
         }
         else if (held && !_uiGesture)
@@ -177,7 +177,7 @@ public class SelfPaintMode : MonoBehaviour
                     float uvR = UvRadiusFor(hit);
                     Vector2 uv = hit.textureCoord;
                     if (_hasLastUV) PaintSegment(_lastUV, uv, uvR);
-                    else _self.skin.PaintAt(uv, _brush, uvR, _hardness);
+                    else _self.SkinPaintAt(uv, _brush, uvR, _hardness);
                     _lastUV = uv;
                     _hasLastUV = true;
                 }
@@ -243,11 +243,11 @@ public class SelfPaintMode : MonoBehaviour
     void PaintSegment(Vector2 from, Vector2 to, float uvR)
     {
         float dist = Vector2.Distance(from, to);
-        if (dist > SeamJump) { _self.skin.PaintAt(to, _brush, uvR, _hardness); return; }
+        if (dist > SeamJump) { _self.SkinPaintAt(to, _brush, uvR, _hardness); return; }
         float step = Mathf.Max(uvR * 0.4f, 0.0015f);
         for (float t = step; t < dist; t += step)
-            _self.skin.PaintAt(Vector2.LerpUnclamped(from, to, t / dist), _brush, uvR, _hardness);
-        _self.skin.PaintAt(to, _brush, uvR, _hardness);
+            _self.SkinPaintAt(Vector2.LerpUnclamped(from, to, t / dist), _brush, uvR, _hardness);
+        _self.SkinPaintAt(to, _brush, uvR, _hardness);
     }
 
     bool RaycastOwnBody(Vector2 screenPos, out RaycastHit bestHit)
@@ -423,7 +423,7 @@ public class SelfPaintMode : MonoBehaviour
         plus.onClick.AddListener(() => { _worldRadius = Mathf.Clamp(_worldRadius + 0.01f, MinWorldRadius, MaxWorldRadius); });
 
         var clear = SizedButton(row2, "CLEAR", new Color(0.55f, 0.20f, 0.20f), 150);
-        clear.onClick.AddListener(() => { _self.skin.Clear(); });
+        clear.onClick.AddListener(() => { _self.SkinClear(); });
 
         var done = SizedButton(row2, "DONE", new Color(0.20f, 0.55f, 0.25f), 170);
         done.onClick.AddListener(Exit);

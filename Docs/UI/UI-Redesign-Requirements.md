@@ -48,7 +48,9 @@ ScaleWithScreenSize / 参考分辨率 1080×1920 / match 0.5。层级（sortingO
 
 ### 4.1 LOBBY 匹配大厅
 
-截图：`shots/01-lobby.png`
+![LOBBY：右上名单 + 倒计时标题 + 动作按钮](shots/01-lobby.png)
+
+![猎人揭晓横幅（红字、无底板,叠在红色地台上）](shots/02-hunter-reveal.png)
 
 | 元素 | 类型 | 现状 | 位置/尺寸 | 代码 |
 |---|---|---|---|---|
@@ -65,7 +67,9 @@ Bot 名字池（全大写 ASCII）：MOSS, BRICK, PIXEL, SOCKS, MANGO, OTTO, FER
 
 ### 4.2 TRAVEL 读条进图（LoadingScreen）
 
-截图：`shots/03-travel-hider.png`（彩虹版）、`shots/04-travel-hunter.png`（猎人红版）
+![躲藏者彩虹版（注意黄色圆斑压住了 TIP 文字——痛点#13）](shots/03-travel-hider.png)
+
+![猎人红版 THE HUNT BEGINS](shots/04-travel-hunter.png)
 
 全屏不透明覆盖（LoadingCanvas 90），只有"本人在传送"时出现；淡入 0.18s，结束白闪+淡出。
 这是现存质量最高的 UI，重设计时保留其骨架、统一其语汇到全局。
@@ -82,11 +86,15 @@ Bot 名字池（全大写 ASCII）：MOSS, BRICK, PIXEL, SOCKS, MANGO, OTTO, FER
 | 轮换提示 | `TIP - <tip>`，36 号白 75%，1.35s 一换（躲藏者 5 条 / 猎人 4 条攻略文案） | (0,-300) | :138-156 |
 
 对面角色没有覆盖层，只有 HUD 文案：猎人等待时 `HIDERS ARE DEPLOYING...`；
-躲藏者收到警告 `HUNTER INCOMING!` + 红色横幅 `GET READY`（截图 `shots/11-hunter-incoming.png`）。
+躲藏者收到警告 `HUNTER INCOMING!` + 红色横幅 `GET READY`：
+
+![猎人进场警告（躲藏者视角）](shots/11-hunter-incoming.png)
 
 ### 4.3 HIDE 躲藏阶段（躲藏者操控层）
 
-截图：`shots/05-hide-hider-controls.png`、`shots/06-pose-panel.png`
+![HIDE 操控层：摇杆 + 按钮群 + HUD（曼森舞厅）](shots/05-hide-controls.png)
+
+![姿势面板展开（注意 STAND 键被 PAINT 按钮压住——痛点#10）](shots/06-pose-panel.png)
 
 HUD 文案：`_title`=`PAINT AND HIDE!`（56 号顶部）、`_timer`=`HIDE  N` 倒计时、
 `_info`=`HIDERS LEFT  N`、左上 `STYLE  0`（见 4.5）。
@@ -112,7 +120,7 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 
 ### 4.4 涂色模式（SelfPaintMode）
 
-截图：`shots/07-paint-mode.png`
+![涂色模式：笔刷光标环 + ZOOM + 底部调色板/工具栏](shots/07-paint-mode.png)
 
 进入后操控层隐藏、身体冻结、镜头拉近到自己身上；在身体上拖动=画笔，身体外拖动=环绕镜头，
 双指捏合/滚轮=推拉（0.7–2.8m），落点在 UI 上的手势全部让给 UI。
@@ -129,7 +137,7 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 
 ### 4.5 SEEK 阶段 · 躲藏者视角
 
-截图：`shots/08-seek-hider.png`
+![SEEK 躲藏者：金色 STYLE 15 脉冲 + 头顶 "!" 嘲讽记号 + TAUNT 键](shots/08-seek-hider.png)
 
 - HUD：`_title`=`DON'T GET FOUND!`、`_timer`=`SEEK  N`。
 - **STYLE 分数**（左上 (32,−36)，42 号 `STYLE  N`）：站在猎人视野内每 0.5s 加分（越近越快，
@@ -144,7 +152,7 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 
 ### 4.6 SEEK 阶段 · 猎人视角（FPS）
 
-截图：`shots/09-seek-hunter-fps.png`
+![猎人 FPS：文字 "+" 准星 + 红色 SHOOT 键](shots/09-seek-hunter-fps.png)
 
 - HUD：等待期 `THE HIDERS ARE HIDING` + `SEEK IN  N`；开猎后 `FIND THEM ALL!` + `SEEK  N`。
   猎人**没有** STYLE 分数。
@@ -156,7 +164,7 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 
 ### 4.7 RESULT 结算屏
 
-截图：`shots/10-result.png`
+![结算屏：标题溢出屏幕 + 无底衬 + 底层按钮穿透（痛点#11 三连击实证）](shots/10-result.png)
 
 - 全屏面板（无背景图），名单/计时全部清空。
 - `_resultText`：62 号白字居中 @ 顶部 (0,−260)，内容 = 胜负标题
@@ -166,7 +174,8 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
   ⚠ 这四条标题里的 `—` 是非 ASCII 字符（已另开修复任务，设计文案请用 `-`）。
 - **PLAY AGAIN**：520×140 矩形蓝钮 (0.20,0.40,0.75)，50 号白字，底部居中 (0,110)。点按重开一局。
 
-→ 痛点#6：这是派对游戏的高光屏，需要胜负两套情绪（彩带 vs 猎人红）、排行榜卡片化。
+→ 痛点#6/#11：这是派对游戏的高光屏，需要胜负两套情绪（彩带 vs 猎人红）、排行榜卡片化;
+截图 10 实证了标题溢出、无底衬、底层按钮穿透三个问题。
 
 ### 4.8 共享组件与全局规则（UiKit）
 
@@ -205,6 +214,17 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 9. **加载屏是全场最好的 UI**（滚筒刷彩虹进度条），其余 UI 都配不上它——把它的语汇
    （滚筒、油漆滴、斜纹）扩散到全局是个现成的方向。
 
+以下 4 条是实机截图新暴露的（见对应图）：
+
+10. **姿势面板与 PAINT 键重叠**（`shots/06-pose-panel.png`）：面板最下排的 STAND 键被
+    蓝色 PAINT 大按钮压住,基本点不到。重排时给面板留独立安全区。
+11. **结算屏三连击**（`shots/10-result.png`）：胜负标题横向溢出屏幕（首尾被裁）；结算层
+    没有压暗底衬,白字直接叠在场景上；底层的 SHOOT/摇杆等操控按钮仍然可见可点。
+12. **中央横幅没有底板**（`shots/02-hunter-reveal.png`、`shots/11-hunter-incoming.png`）：
+    红色揭晓文字叠在红色猎人地台上几乎融为一体；GET READY 同理。需要半透明底条或描边加粗。
+13. **加载屏的随机圆斑会盖住 TIP 文字**（`shots/03-travel-hider.png` 黄色斑点正压在
+    TIP 行上）：装饰粒子应避开文字安全区。
+
 ## 6. 设计交付物要求
 
 请按以下清单交付，工程侧才能落地：
@@ -234,6 +254,19 @@ CHAIR / BALL / DEAD / BEND`。点选即摆姿势并收起面板。→ 痛点#8�
 
 ---
 
-*附：截图索引*
+**附：截图索引**（由 `Assets/Editor/UiShotDirector.cs` 自动生成,1080×1920,场景 = Arena06 THE MANSION；
+重设计落地后可用同一工具重跑同名截图做前后对比）
 
-<!-- SHOT_INDEX -->
+| 文件 | 内容 |
+|---|---|
+| `shots/01-lobby.png` | LOBBY：右上名单（含 [H] 志愿标记）+ 顶部标题 |
+| `shots/02-hunter-reveal.png` | 猎人揭晓横幅（轮盘定格,红字） |
+| `shots/03-travel-hider.png` | 读条进图·躲藏者彩虹版（滚筒刷进度条 ~45%） |
+| `shots/04-travel-hunter.png` | 读条进图·猎人红版（THE HUNT BEGINS） |
+| `shots/05-hide-controls.png` | HIDE：摇杆 + DASH/JUMP/POSE/PAINT/DECOY/EYE + HUD |
+| `shots/06-pose-panel.png` | 姿势选择面板（9 项两列网格） |
+| `shots/07-paint-mode.png` | 涂色模式：调色板/PICK/笔刷尺寸/CLEAR/DONE/ZOOM |
+| `shots/08-seek-hider.png` | SEEK 躲藏者：STYLE 分数 + TAUNT（含头顶 "!" 记号） |
+| `shots/09-seek-hunter-fps.png` | SEEK 猎人 FPS：`+` 准星 + 红色 SHOOT 键 |
+| `shots/10-result.png` | 结算屏:胜负标题 + STYLE 分数 + PLAY AGAIN |
+| `shots/11-hunter-incoming.png` | 躲藏者视角的 HUNTER INCOMING! + GET READY 警告 |

@@ -271,17 +271,25 @@ public class PaintableBody : MonoBehaviour
     /// <summary>Bot camouflage: base coat in the environment colour plus darker/lighter blotches.</summary>
     public void FillCamo(Color baseColor)
     {
+        FillCamo(baseColor, Random.Range(0, 100000));
+    }
+
+    /// <summary>Seeded variant — networked camo sends (colour, seed) and every peer
+    /// reproduces the exact same blotches instead of shipping pixels.</summary>
+    public void FillCamo(Color baseColor, int seed)
+    {
         Fill(baseColor);
-        int blotches = Random.Range(14, 24);
+        var rnd = new System.Random(seed);
+        int blotches = rnd.Next(14, 24);
         for (int i = 0; i < blotches; i++)
         {
-            float v = (Random.value - 0.5f) * 0.25f;
+            float v = ((float)rnd.NextDouble() - 0.5f) * 0.25f;
             Color blotch = new Color(
                 Mathf.Clamp01(baseColor.r + v),
                 Mathf.Clamp01(baseColor.g + v),
                 Mathf.Clamp01(baseColor.b + v));
-            var uv = new Vector2(Random.value, Random.value);
-            PaintAt(uv, blotch, Random.Range(0.04f, 0.12f), 0.35f);
+            var uv = new Vector2((float)rnd.NextDouble(), (float)rnd.NextDouble());
+            PaintAt(uv, blotch, Mathf.Lerp(0.04f, 0.12f, (float)rnd.NextDouble()), 0.35f);
         }
     }
 

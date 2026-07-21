@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -33,6 +34,8 @@ public class MatchManager : MonoBehaviour
     public float lobbyCountdownSeconds = 8f;
     public float travelSeconds = 3.2f;
     [Range(0f, 1f)] public float botVolunteerChance = 0.3f;
+
+    public static MatchManager Instance { get; private set; }
 
     public MatchPhase Phase { get; private set; }
     public readonly List<Character> Characters = new List<Character>();
@@ -80,6 +83,16 @@ public class MatchManager : MonoBehaviour
         if (FindFirstObjectByType<ArenaMap>() == null) return;
         if (FindFirstObjectByType<MatchManager>() != null) return;
         new GameObject("MatchManager").AddComponent<MatchManager>();
+    }
+
+    void Awake()
+    {
+        Instance = this;
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     void Start()
@@ -245,6 +258,7 @@ public class MatchManager : MonoBehaviour
     void SpawnPlayer()
     {
         var ch = Character.Create("You", _lobby.SpawnPoint(), true);
+        ch.ApplySize(Character.HiderScale); // everyone starts hider-sized; MakeHunter grows them
         Characters.Add(ch);
         _player = ch;
         _cam.target = ch.transform;
@@ -257,6 +271,7 @@ public class MatchManager : MonoBehaviour
         string name = BotNames[(Characters.Count - 1) % BotNames.Length];
         // drop in from slightly above the floor — a tiny "joined" moment
         var ch = Character.Create(name, _lobby.SpawnPoint() + Vector3.up * 1.4f, false);
+        ch.ApplySize(Character.HiderScale);
         Characters.Add(ch);
 
         var brain = ch.gameObject.AddComponent<BotBrain>();
@@ -311,6 +326,7 @@ public class MatchManager : MonoBehaviour
         ch.team = Team.Hunter;
         ch.skin.Fill(HunterColor);
         ch.motor.SetPose(Pose.Stand);
+        ch.ApplySize(Character.HunterScale); // infected hiders GROW into hunters
         ch.motor.SetAiming(true); // holding-both stance
 
         var gun = ch.GetComponent<Shotgun>();
@@ -322,7 +338,7 @@ public class MatchManager : MonoBehaviour
         if (ch.isPlayer && _rig != null) _rig.SetTeam(Team.Hunter);
     }
 
-    static void AddGunVisual(Character ch)
+    public static void AddGunVisual(Character ch)
     {
         if (ch.motor.body == null) return;
         foreach (var t in ch.motor.body.GetComponentsInChildren<Transform>())
@@ -409,6 +425,7 @@ public class MatchManager : MonoBehaviour
         Vector3 pos = owner.transform.position - owner.transform.forward * 0.6f;
         var d = Character.Create(owner.displayName + " decoy", pos, false, owner.variant);
         d.isDecoy = true;
+        d.ApplySize(owner.bodyScale); // clone matches the owner's size
         d.transform.rotation = owner.transform.rotation;
         d.skin.CopySkinFrom(owner.skin);
         // a standing decoy would sway — freeze it in a scenery pose instead
@@ -727,5 +744,98 @@ public class MatchManager : MonoBehaviour
         UiKit.SetRect((RectTransform)again.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 110), new Vector2(520, 140));
         again.onClick.AddListener(() => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
         _resultPanel.SetActive(false);
+    }
+
+    // ---------------- net bridge (offline-safe) ----------------
+    // The netcode layer (Arena/Net/) drives these; offline every Request* falls
+    // through to the local fast path, so bot matches behave exactly as before.
+
+    MatchNet _net;
+
+    public void AttachNet(MatchNet net) { _net = net; }
+
+    /// <summary>Net-spawned characters announce themselves (host and clients).</summary>
+    public void Register(Character ch)
+    {
+        if (ch == null || Characters.Contains(ch)) return;
+        Characters.Add(ch);
+        UpdateRoster();
+    }
+
+    public void Unregister(Character ch)
+    {
+        if (ch == null) return;
+        Characters.Remove(ch);
+        _volunteers.Remove(ch);
+        _score.Remove(ch);
+        UpdateRoster();
+    }
+
+    /// <summary>Bind the character this peer controls (rig/camera wiring is NetGame's job).</summary>
+    public void AdoptLocalPlayer(Character ch) { _player = ch; }
+
+    public void RequestTaunt(Character ch)
+    {
+        if (ch == null) return;
+        if (ch.NetActive && !ch.netSync.IsServer) { ch.netSync.TauntServerRpc(); return; }
+        DoTaunt(ch);
+    }
+
+    public bool RequestDecoy(Character ch)
+    {
+        if (ch == null) return false;
+        if (ch.NetActive && !ch.netSync.IsServer) { ch.netSync.DecoyServerRpc(); return true; }
+        return SpawnDecoy(ch) != null;
+    }
+
+    public void RequestHit(Character shooter, Character victim)
+    {
+        if (shooter != null && shooter.NetActive && !shooter.netSync.IsServer)
+        {
+            bool hasVictim = victim != null && victim.netSync != null;
+            var vRef = hasVictim ? new NetworkObjectReference(victim.netSync.NetworkObject) : default(NetworkObjectReference);
+            shooter.netSync.HunterFireServerRpc(vRef, hasVictim, NetworkManager.Singleton.LocalClientId);
+            return;
+        }
+        if (shooter != null && shooter.NetActive) shooter.netSync.ServerShootFx();
+        if (victim != null) Convert(victim);
+    }
+
+    /// <summary>Replicated taunt FX: the floating "!" above the taunter, on every peer.</summary>
+    public void SpawnTauntMarker(Character ch) { StartCoroutine(TauntMarker(ch)); }
+
+    /// <summary>Server told this client its style-score total changed.</summary>
+    public void OnLocalScore(float total)
+    {
+        if (_player == null) return;
+        float old;
+        _score.TryGetValue(_player, out old);
+        if (total > old) _lastGainAt = Time.time; // keep the gold pulse
+        _score[_player] = total;
+        UpdateScoreHud();
+    }
+
+    public void OnNetBanner(string text, bool red, bool huntersOnly, float seconds)
+    {
+        if (huntersOnly && (_player == null || _player.team != Team.Hunter)) return;
+        StartCoroutine(FlashBanner(text, seconds));
+        if (red) _banner.color = new Color(1f, 0.35f, 0.3f); // after: FlashBanner resets to white
+    }
+
+    public void OnNetHunterReveal(Character hunter)
+    {
+        string who = hunter == null ? "SOMEONE IS" : (hunter.isPlayer ? "YOU ARE" : hunter.displayName + " IS");
+        StartCoroutine(FlashBanner(who + " THE HUNTER!", 1.5f));
+        _banner.color = new Color(1f, 0.35f, 0.3f);
+    }
+
+    public void OnNetResult(bool huntersWin, string topScores)
+    {
+        // Minimal client-side headline; the full scoreboard format is owned by the
+        // netcode workstream.
+        SetPhase(MatchPhase.Result);
+        if (_resultText != null)
+            _resultText.text = (huntersWin ? "HUNTERS WIN!" : "HIDERS WIN!")
+                + (string.IsNullOrEmpty(topScores) ? "" : "\n\n" + topScores);
     }
 }

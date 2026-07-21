@@ -158,13 +158,13 @@ public class BotBrain : MonoBehaviour
         bool s1 = SampleSurfaceColor(transform.position + Vector3.up * 0.5f, Vector3.down, 3f, out c1);
         bool s2 = SampleSurfaceColor(transform.position + Vector3.up * 0.5f + transform.right * 0.4f, Vector3.down, 3f, out c2);
         if (s1 && s2 && ColorDiff(c1, c2) > 0.25f)
-            self.skin.FillStripes(c1, c2, Random.Range(16, 28));
+            self.SkinFillStripes(c1, c2, Random.Range(16, 28));
         else if (s1)
-            self.skin.FillCamo(c1);
+            self.SkinFillCamo(c1);
         else if (SampleSurfaceColor(self.EyePos, transform.forward, 2.5f, out c1))
-            self.skin.FillCamo(c1);
+            self.SkinFillCamo(c1);
 
-        self.motor.SetPose((Pose)Random.Range(0, 6));
+        self.motor.SetPose((Pose)Random.Range(0, 9)); // any pose incl. Ball/Dead/Bend
         _settled = true;
     }
 
@@ -234,6 +234,7 @@ public class BotBrain : MonoBehaviour
             if (top >= fireThreshold && dist <= fireRange && gun != null && gun.CanFire && HasLineOfSight(suspect))
             {
                 self.motor.TriggerShoot();
+                self.NetShootFx(); // remote peers play the same swing
                 var victim = gun.Fire(self.EyePos, (suspect.EyePos - self.EyePos).normalized, self);
                 if (victim != null) match.Convert(victim);
                 _suspicion[suspect] = 0.3f; // re-evaluate after the shot

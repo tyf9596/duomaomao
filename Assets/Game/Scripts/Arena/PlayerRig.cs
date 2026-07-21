@@ -251,14 +251,14 @@ public class PlayerRig : MonoBehaviour
     void OnTaunt()
     {
         if (self.team != Team.Hider || match == null) return;
-        match.DoTaunt(self);
+        match.RequestTaunt(self);
     }
 
     void OnDecoy()
     {
         if (_decoyUsed || self.team != Team.Hider || match == null) return;
         if (match.Phase != MatchPhase.Hide && match.Phase != MatchPhase.Seek) return;
-        if (match.SpawnDecoy(self) == null) return;
+        if (!match.RequestDecoy(self)) return;
         _decoyUsed = true;
         RefreshContextButton();
     }
@@ -305,9 +305,10 @@ public class PlayerRig : MonoBehaviour
             var gun = GetComponent<Shotgun>();
             if (gun == null || !gun.CanFire) return;
             self.motor.TriggerShoot();
-            // fire from the camera so the crosshair is exactly the impact point (FPS style)
+            // fire from the camera so the crosshair is exactly the impact point (FPS style);
+            // the local raycast decides the hit, the server validates and converts
             var victim = gun.Fire(cam.transform.position, cam.transform.forward, self);
-            if (victim != null) match.Convert(victim);
+            match.RequestHit(self, victim);
         }
     }
 
@@ -354,7 +355,8 @@ public class PlayerRig : MonoBehaviour
         _posePanel = new GameObject("PosePanel", typeof(RectTransform));
         _posePanel.transform.SetParent(root, false);
         UiKit.SetRect((RectTransform)_posePanel.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(-290, 610), new Vector2(500, 440));
-        string[] poseNames = { "STAND", "CROUCH", "STATUE", "LIE", "SCARECROW", "CHAIR", "BALL", "DEAD", "BEND" };
+        // NORMAL = back to regular walk/run anims; every other pose now PERSISTS while moving
+        string[] poseNames = { "NORMAL", "CROUCH", "STATUE", "LIE", "SCARECROW", "CHAIR", "BALL", "DEAD", "BEND" };
         for (int i = 0; i < poseNames.Length; i++)
         {
             Pose p = (Pose)i;

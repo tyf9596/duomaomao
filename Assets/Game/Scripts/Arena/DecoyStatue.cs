@@ -13,6 +13,8 @@ public class DecoyStatue : MonoBehaviour
 
     [Tooltip("Blocky character variant a..r; empty = random")]
     public string variant = "";
+    [Tooltip("Rig scale — matches Character.HiderScale so decoys read as hiders")]
+    public float bodyScale = 0.4f;
     public Pose pose = Pose.Statue;
     public Paint paint = Paint.Stone;
     public Color colorA = new Color(0.62f, 0.63f, 0.66f); // stone grey / stripe A
@@ -38,7 +40,7 @@ public class DecoyStatue : MonoBehaviour
         body.name = "Body";
         body.transform.localPosition = Vector3.zero;
         body.transform.localRotation = Quaternion.identity;
-        body.transform.localScale = Vector3.one * 0.5f; // same 1.35m silhouette as players
+        body.transform.localScale = Vector3.one * bodyScale; // same silhouette as the hiders
         foreach (var mf in body.GetComponentsInChildren<MeshFilter>())
         {
             if (mf.GetComponent<Collider>() == null)
@@ -62,7 +64,7 @@ public class DecoyStatue : MonoBehaviour
         {
             // same procedural plank as CharacterMotor.SetPose
             body.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
-            body.transform.localPosition = new Vector3(0f, 0.37f, 0.25f) * 0.5f;
+            body.transform.localPosition = new Vector3(0f, 0.37f, 0.25f) * bodyScale;
         }
 
         var skin = body.AddComponent<PaintableBody>();
