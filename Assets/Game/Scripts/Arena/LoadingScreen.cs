@@ -57,7 +57,7 @@ public class LoadingScreen : MonoBehaviour
         // opaque backdrop (also swallows touches aimed at the controls beneath)
         var bg = new GameObject("Bg", typeof(Image));
         bg.transform.SetParent(root, false);
-        bg.GetComponent<Image>().color = _hunter ? new Color(0.10f, 0.06f, 0.06f) : new Color(0.085f, 0.085f, 0.11f);
+        bg.GetComponent<Image>().color = _hunter ? UiKit.Hex("1D0F0C") : UiKit.Hex("15151C");
         Stretch((RectTransform)bg.transform);
 
         // slow-drifting diagonal stripes give the flat backdrop some life
@@ -67,7 +67,7 @@ public class LoadingScreen : MonoBehaviour
             var s = new GameObject("Stripe", typeof(Image));
             s.transform.SetParent(root, false);
             var img = s.GetComponent<Image>();
-            img.color = new Color(1f, 1f, 1f, 0.028f);
+            img.color = _hunter ? new Color(1f, 0.35f, 0.26f, 0.055f) : new Color(1f, 1f, 1f, 0.028f);
             img.raycastTarget = false;
             var rt = (RectTransform)s.transform;
             Center(rt, new Vector2(0f, -900f + i * 360f), new Vector2(2600f, 80f));
@@ -75,21 +75,58 @@ public class LoadingScreen : MonoBehaviour
             _stripes[i] = rt;
         }
 
+        // ambient paint dots (design 03) / warning stripe edges (design 04)
+        if (_hunter)
+        {
+            foreach (float yEdge in new[] { 1f, 0f })
+            {
+                var edge = UiKit.MakeImage(root, UiKit.Shape("stripe-warn-tile"), new Color(UiKit.HunterRed.r, UiKit.HunterRed.g, UiKit.HunterRed.b, 0.85f), "WarnEdge");
+                edge.type = Image.Type.Tiled;
+                UiKit.SetRect(edge.rectTransform, new Vector2(0f, yEdge), new Vector2(1f, yEdge), new Vector2(0.5f, yEdge), Vector2.zero, new Vector2(0f, 26f));
+            }
+        }
+        else
+        {
+            Color[] dotC = { UiKit.Gold, UiKit.Hex("2AB8A8"), UiKit.Hex("E85CA0") };
+            float[] dx = { -420f, 390f, -370f };
+            float[] dy = { 790f, 640f, -440f };
+            float[] ds = { 120f, 76f, 90f };
+            for (int i = 0; i < 3; i++)
+            {
+                var d = UiKit.MakeImage(root, UiKit.CircleSprite, new Color(dotC[i].r, dotC[i].g, dotC[i].b, 0.2f), "Dot");
+                Center(d.rectTransform, new Vector2(dx[i], dy[i]), new Vector2(ds[i], ds[i]));
+            }
+        }
+
         var kicker = UiKit.MakeText(root, _hunter ? "DEPLOYING TO" : "NOW ENTERING", 40, TextAnchor.MiddleCenter);
-        kicker.color = new Color(1f, 1f, 1f, 0.55f);
+        kicker.color = _hunter ? new Color(1f, 0.71f, 0.65f, 0.75f) : new Color(1f, 1f, 1f, 0.55f);
         Center(kicker.rectTransform, new Vector2(0f, 430f), new Vector2(900f, 60f));
 
-        var title = UiKit.MakeText(root, mapName, 86, TextAnchor.MiddleCenter);
-        Center(title.rectTransform, new Vector2(0f, 340f), new Vector2(1040f, 120f));
+        var title = UiKit.MakeText(root, mapName, 100, TextAnchor.MiddleCenter);
+        Center(title.rectTransform, new Vector2(0f, 330f), new Vector2(1040f, 130f));
 
-        var sub = UiKit.MakeText(root, subtitle, 40, TextAnchor.MiddleCenter);
-        sub.color = _hunter ? new Color(1f, 0.42f, 0.35f) : new Color(0.55f, 0.8f, 1f);
-        Center(sub.rectTransform, new Vector2(0f, 250f), new Vector2(900f, 60f));
+        // subtitle pill (tinted border chip, design 03/04)
+        Color subTint = _hunter ? UiKit.Hex("FF6B54") : UiKit.Hex("8CCFFF");
+        var subPill = new GameObject("SubPill", typeof(RectTransform));
+        subPill.transform.SetParent(root, false);
+        Center((RectTransform)subPill.transform, new Vector2(0f, 224f), new Vector2(660f, 66f));
+        var subBorder = UiKit.MakePill(subPill.transform, new Color(subTint.r, subTint.g, subTint.b, 0.45f), "Border");
+        UiKit.SetRect(subBorder.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        var subInner = UiKit.MakePill(subPill.transform, _hunter ? UiKit.Hex("1D0F0C") : UiKit.Hex("15151C"), "Inner");
+        UiKit.SetRect(subInner.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-6f, -6f));
+        var subFillTint = UiKit.MakePill(subPill.transform, new Color(subTint.r, subTint.g, subTint.b, 0.12f), "Tint");
+        UiKit.SetRect(subFillTint.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-6f, -6f));
+        var sub = UiKit.MakeText(subPill.transform, subtitle, 34, TextAnchor.MiddleCenter, false);
+        sub.color = subTint;
+        UiKit.SetRect(sub.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
 
-        // paint-stroke progress bar
+        // paint-stroke progress bar (rounded trough)
         var barBg = new GameObject("BarBg", typeof(Image));
         barBg.transform.SetParent(root, false);
-        barBg.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.20f);
+        var barBgImg = barBg.GetComponent<Image>();
+        barBgImg.sprite = UiKit.Shape("chip-pill");
+        barBgImg.type = Image.Type.Sliced;
+        barBgImg.color = _hunter ? UiKit.Hex("2A1512") : UiKit.Hex("26262E");
         var barRt = (RectTransform)barBg.transform;
         Center(barRt, Vector2.zero, new Vector2(BarWidth + 20f, 66f));
 
@@ -122,7 +159,7 @@ public class LoadingScreen : MonoBehaviour
             _dripTargetH[i] = Random.Range(30f, 80f);
         }
 
-        // roller head riding the leading edge
+        // roller head riding the leading edge (+ its little handle, design 03)
         var headGo = new GameObject("Head", typeof(Image));
         headGo.transform.SetParent(barRt, false);
         var headImg = headGo.GetComponent<Image>();
@@ -130,14 +167,26 @@ public class LoadingScreen : MonoBehaviour
         headImg.color = Color.white;
         headImg.raycastTarget = false;
         _head = (RectTransform)headGo.transform;
-        Center(_head, new Vector2(-BarWidth * 0.5f, 0f), new Vector2(76f, 76f));
+        Center(_head, new Vector2(-BarWidth * 0.5f, 0f), new Vector2(100f, 100f));
+        var handle = UiKit.MakeImage(_head, UiKit.Shape("chip-pill"), UiKit.Hex("B9B6AD"), "Handle");
+        UiKit.SetRect(handle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0f),
+            new Vector2(30f, 34f), new Vector2(14f, 80f));
+        handle.rectTransform.localEulerAngles = new Vector3(0f, 0f, -28f);
+        handle.transform.SetAsFirstSibling();
 
-        _percent = UiKit.MakeText(root, "0%", 46, TextAnchor.MiddleCenter);
-        Center(_percent.rectTransform, new Vector2(0f, -110f), new Vector2(300f, 60f));
+        _percent = UiKit.MakeText(root, "0%", 52, TextAnchor.MiddleCenter);
+        Center(_percent.rectTransform, new Vector2(0f, -110f), new Vector2(300f, 64f));
 
-        _tip = UiKit.MakeText(root, "", 36, TextAnchor.MiddleCenter);
-        _tip.color = new Color(1f, 1f, 1f, 0.75f);
-        Center(_tip.rectTransform, new Vector2(0f, -300f), new Vector2(1000f, 100f));
+        // TIP row: gold chip + text, in a particle keep-out band (fix #13)
+        var tipBadge = UiKit.MakePill(root, _hunter ? UiKit.HunterRed : UiKit.Gold, "TipBadge");
+        Center(tipBadge.rectTransform, new Vector2(-420f, -560f), new Vector2(110f, 50f));
+        var tipBadgeTxt = UiKit.MakeText(tipBadge.transform, "TIP", 26, TextAnchor.MiddleCenter, false);
+        tipBadgeTxt.color = _hunter ? Color.white : UiKit.GoldText;
+        UiKit.SetRect(tipBadgeTxt.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        _tip = UiKit.MakeText(root, "", 34, TextAnchor.MiddleLeft, false, false);
+        _tip.color = _hunter ? UiKit.Hex("FFD9D1") : new Color(1f, 1f, 1f, 0.77f);
+        UiKit.SetRect(_tip.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0.5f),
+            new Vector2(-340f, -560f), new Vector2(860f, 90f));
         _tips = _hunter
             ? new[]
             {
@@ -192,7 +241,8 @@ public class LoadingScreen : MonoBehaviour
             float p = 1f - Mathf.Pow(1f - raw, 2.1f); // fast start, eases near the end
             _fill.fillAmount = p;
             float edgeX = -BarWidth * 0.5f + BarWidth * p;
-            _head.anchoredPosition = new Vector2(edgeX, 0f);
+            // spec 5: the roller head bobs +-3px as it paints
+            _head.anchoredPosition = new Vector2(edgeX, Mathf.Sin(_t * Mathf.PI * 2f / 0.3f) * 3f);
             _percent.text = Mathf.RoundToInt(p * 100f) + "%";
 
             for (int i = 0; i < _drips.Length; i++)
@@ -205,7 +255,7 @@ public class LoadingScreen : MonoBehaviour
             }
 
             int tipIdx = Mathf.FloorToInt(_t / 1.35f) % _tips.Length;
-            if (tipIdx != _tipIndex) { _tipIndex = tipIdx; _tip.text = "TIP - " + _tips[tipIdx]; }
+            if (tipIdx != _tipIndex) { _tipIndex = tipIdx; _tip.text = _tips[tipIdx]; }
 
             if (_t >= _nextSplatAt)
             {
@@ -250,8 +300,10 @@ public class LoadingScreen : MonoBehaviour
         img.color = c;
         img.raycastTarget = false;
 
-        // keep clear of the bar and text band in the middle
-        float y = Random.Range(170f, 800f) * (Random.value < 0.5f ? -1f : 1f);
+        // keep clear of the bar/text band, the title block AND the TIP row (fix #13)
+        float y;
+        do { y = Random.Range(170f, 800f) * (Random.value < 0.5f ? -1f : 1f); }
+        while ((y > -700f && y < -420f) || (y > 150f && y < 500f));
         float size = Random.Range(24f, 110f);
         var rt = (RectTransform)go.transform;
         Center(rt, new Vector2(Random.Range(-440f, 440f), y), new Vector2(size, size));

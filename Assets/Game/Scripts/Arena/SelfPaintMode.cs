@@ -16,12 +16,13 @@ public class SelfPaintMode : MonoBehaviour
 {
     public bool Active { get; private set; }
 
+    // spec 1.1: the 8 brush colors keep their semantics, tuned to the new palette
     static readonly Color[] Palette =
     {
-        new Color(0.36f, 0.62f, 0.30f), new Color(0.55f, 0.40f, 0.28f),
-        new Color(0.20f, 0.35f, 0.75f), new Color(0.90f, 0.50f, 0.15f),
-        new Color(0.70f, 0.15f, 0.15f), new Color(0.10f, 0.50f, 0.50f),
-        new Color(0.85f, 0.82f, 0.75f), new Color(0.12f, 0.12f, 0.14f),
+        UiKit.Hex("56A845"), UiKit.Hex("8C6239"),
+        UiKit.Hex("2E6BD6"), UiKit.Hex("F5822A"),
+        UiKit.Hex("D63A2A"), UiKit.Hex("2AB8A8"),
+        UiKit.Hex("EFE7D2"), UiKit.Hex("1E1E24"),
     };
 
     const float SeamJump = 0.08f;      // UV jump treated as crossing islands, not a drag
@@ -40,8 +41,12 @@ public class SelfPaintMode : MonoBehaviour
     bool _eyedropper;
 
     GameObject _root;
+    RectTransform _barRt;
     Image _swatch;
     Image _pickBg;
+    Image _pickIcon;
+    Text _pickLabel;
+    Image[] _swatchRings;
     RectTransform _sizeDot;
     Text _sizeText;
     RectTransform _cursor;
@@ -86,6 +91,22 @@ public class SelfPaintMode : MonoBehaviour
         _rig.SetControlsVisible(false);
         EnsureUI();
         _root.SetActive(true);
+        // spec 5: the toolbar slides up from the bottom edge (260ms easeOutCubic)
+        if (_barRt != null) StartCoroutine(BarIn());
+    }
+
+    System.Collections.IEnumerator BarIn()
+    {
+        Vector2 basePos = new Vector2(0f, -44f);
+        float t = 0f;
+        while (t < 0.26f && _barRt != null && Active)
+        {
+            t += Time.deltaTime;
+            float k = UiKit.EaseOutCubic(t / 0.26f);
+            _barRt.anchoredPosition = Vector2.LerpUnclamped(basePos + new Vector2(0f, -340f), basePos, k);
+            yield return null;
+        }
+        if (_barRt != null) _barRt.anchoredPosition = basePos;
     }
 
     public void Exit()
@@ -198,6 +219,7 @@ public class SelfPaintMode : MonoBehaviour
 
         UpdateCursor(pos, held || Mouse.current != null);
         if (_swatch != null) _swatch.color = _brush;
+        RefreshPaletteSelection();
         UpdateSizeIndicator();
     }
 
@@ -308,7 +330,21 @@ public class SelfPaintMode : MonoBehaviour
     void SetEyedropper(bool on)
     {
         _eyedropper = on;
-        if (_pickBg != null) _pickBg.color = on ? new Color(0.98f, 0.85f, 0.30f) : new Color(0.75f, 0.75f, 0.78f);
+        if (_pickBg != null) _pickBg.color = on ? UiKit.Gold : UiKit.Hex("2A2A36");
+        if (_pickIcon != null) _pickIcon.color = on ? UiKit.GoldText : Color.white;
+        if (_pickLabel != null) _pickLabel.color = on ? UiKit.GoldText : Color.white;
+    }
+
+    /// <summary>Gold ring on whichever palette swatch matches the current brush.</summary>
+    void RefreshPaletteSelection()
+    {
+        if (_swatchRings == null) return;
+        for (int i = 0; i < _swatchRings.Length; i++)
+        {
+            bool sel = !_eyedropper
+                && Mathf.Abs(Palette[i].r - _brush.r) + Mathf.Abs(Palette[i].g - _brush.g) + Mathf.Abs(Palette[i].b - _brush.b) < 0.01f;
+            if (_swatchRings[i].gameObject.activeSelf != sel) _swatchRings[i].gameObject.SetActive(sel);
+        }
     }
 
     // ---------------- UI ----------------
@@ -361,95 +397,154 @@ public class SelfPaintMode : MonoBehaviour
         UiKit.SetRect(_cursor, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40));
         cur.SetActive(false);
 
-        // zoom buttons on the right edge
-        var zin = UiKit.MakeButton(root, "ZOOM+", new Color(0.22f, 0.22f, 0.26f, 0.85f), Color.white, 34, round: true);
-        UiKit.SetRect((RectTransform)zin.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-100, 110), new Vector2(150, 150));
-        zin.onClick.AddListener(() => Zoom(-0.25f));
-        var zout = UiKit.MakeButton(root, "ZOOM-", new Color(0.22f, 0.22f, 0.26f, 0.85f), Color.white, 34, round: true);
-        UiKit.SetRect((RectTransform)zout.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-100, -60), new Vector2(150, 150));
-        zout.onClick.AddListener(() => Zoom(0.25f));
+        // zoom: icon stickers on the right edge (design 07)
+        var zin = UiKit.MakeStickerButton(root, "", "zoom-in", new Color(UiKit.Ink2.r, UiKit.Ink2.g, UiKit.Ink2.b, 0.88f), Color.white, 130);
+        UiKit.SetRect(zin.root, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-100, 110), new Vector2(130, 130));
+        zin.button.onClick.AddListener(() => Zoom(-0.25f));
+        var zout = UiKit.MakeStickerButton(root, "", "zoom-out", new Color(UiKit.Ink2.r, UiKit.Ink2.g, UiKit.Ink2.b, 0.88f), Color.white, 130);
+        UiKit.SetRect(zout.root, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-100, -60), new Vector2(130, 130));
+        zout.button.onClick.AddListener(() => Zoom(0.25f));
 
-        // bottom bar
-        var bar = new GameObject("Bar", typeof(Image), typeof(VerticalLayoutGroup));
+        // bottom toolbar: INK, rounded 44 at the top only (bottom corners off-screen).
+        // Laid out by hand — runtime-built nested layout groups proved unreliable.
+        var bar = new GameObject("Bar", typeof(Image));
         bar.transform.SetParent(root, false);
-        bar.GetComponent<Image>().color = new Color(0.10f, 0.09f, 0.08f, 0.82f);
-        UiKit.SetRect((RectTransform)bar.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(0, 330));
-        var vlg = bar.GetComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(20, 20, 16, 16);
-        vlg.spacing = 12;
-        vlg.childAlignment = TextAnchor.MiddleCenter;
-        vlg.childControlWidth = true; vlg.childControlHeight = true;
-        vlg.childForceExpandWidth = true; vlg.childForceExpandHeight = false;
+        var barImg = bar.GetComponent<Image>();
+        barImg.sprite = UiKit.Shape("panel-round-32");
+        barImg.type = Image.Type.Sliced;
+        barImg.color = new Color(UiKit.Ink.r, UiKit.Ink.g, UiKit.Ink.b, 0.95f);
+        UiKit.SetRect((RectTransform)bar.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0f, -44f), new Vector2(0, 374));
+        _barRt = (RectTransform)bar.transform;
+        Transform barT = bar.transform;
+        float rowY1 = -89f, rowY2 = -227f; // row centers measured from the bar's top
 
-        var row1 = MakeRow(bar.transform);
-        var row2 = MakeRow(bar.transform);
+        // current color swatch (white ring) leads the palette row
+        var curSwatch = new GameObject("Current", typeof(RectTransform));
+        curSwatch.transform.SetParent(barT, false);
+        BarRect((RectTransform)curSwatch.transform, 115f, rowY1, 130f, 130f);
+        var curRing = UiKit.MakeImage(curSwatch.transform, UiKit.Shape("tile-round-12"), Color.white, "Ring");
+        UiKit.SetRect(curRing.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        _swatch = UiKit.MakeImage(curSwatch.transform, UiKit.Shape("tile-round-12"), _brush, "Fill");
+        UiKit.SetRect(_swatch.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-12f, -12f));
 
-        foreach (var col in Palette)
+        _swatchRings = new Image[Palette.Length];
+        for (int i = 0; i < Palette.Length; i++)
         {
-            Color c = col;
-            var b = SizedButton(row1, "", c, 84);
-            b.onClick.AddListener(() => { _brush = c; SetEyedropper(false); });
+            Color c = Palette[i];
+            var swGo = new GameObject("Swatch" + i, typeof(Image), typeof(Button));
+            swGo.transform.SetParent(barT, false);
+            var swImg = swGo.GetComponent<Image>();
+            swImg.sprite = UiKit.Shape("tile-round-12");
+            swImg.type = Image.Type.Sliced;
+            swImg.color = c;
+            BarRect((RectTransform)swGo.transform, 240f + i * 106f, rowY1, 96f, 120f);
+            var swBtn = swGo.GetComponent<Button>();
+            swBtn.transition = Selectable.Transition.None;
+            swGo.AddComponent<PressFx>().target = swImg;
+            // selection ring (gold, design: 6px)
+            var ring = UiKit.MakeImage(swGo.transform, UiKit.Shape("tile-round-12"), UiKit.Gold, "Sel");
+            UiKit.SetRect(ring.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(16f, 16f));
+            var ringHole = UiKit.MakeImage(ring.transform, UiKit.Shape("tile-round-12"), c, "Hole");
+            UiKit.SetRect(ringHole.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-12f, -12f));
+            ring.gameObject.SetActive(false);
+            _swatchRings[i] = ring;
+            swBtn.onClick.AddListener(() => { _brush = c; SetEyedropper(false); });
         }
-        var curSwatch = new GameObject("Current", typeof(Image), typeof(LayoutElement));
-        curSwatch.transform.SetParent(row1, false);
-        _swatch = curSwatch.GetComponent<Image>();
-        var curLe = curSwatch.GetComponent<LayoutElement>();
-        curLe.minWidth = 110; curLe.preferredWidth = 110; curLe.preferredHeight = 125;
 
-        var pick = SizedButton(row2, "PICK", new Color(0.75f, 0.75f, 0.78f), 150, new Color(0.1f, 0.1f, 0.1f));
+        // tools row: PICK / - size + / CLEAR / DONE  (total 924 wide, centred)
+        var pick = IconToolButton(barT, "PICK", "eyedropper", UiKit.Hex("2A2A36"), Color.white, 153f, rowY2, 150, 110, 44, 22);
         _pickBg = pick.GetComponent<Image>();
+        _pickIcon = pick.transform.Find("Icon_eyedropper").GetComponent<Image>();
+        _pickLabel = pick.GetComponentInChildren<Text>();
         pick.onClick.AddListener(() => SetEyedropper(!_eyedropper));
 
-        var minus = SizedButton(row2, "-", new Color(0.30f, 0.30f, 0.33f), 100);
+        var stepper = new GameObject("Stepper", typeof(Image));
+        stepper.transform.SetParent(barT, false);
+        var stImg = stepper.GetComponent<Image>();
+        stImg.sprite = UiKit.Shape("tile-round-12");
+        stImg.type = Image.Type.Sliced;
+        stImg.color = UiKit.Hex("2A2A36");
+        BarRect((RectTransform)stepper.transform, 414f, rowY2, 348f, 110f);
+        var minus = StepperButton(stepper.transform, "-", -121f);
         minus.onClick.AddListener(() => { _worldRadius = Mathf.Clamp(_worldRadius - 0.01f, MinWorldRadius, MaxWorldRadius); });
-
-        // live size indicator: dot grows with brush size, label shows cm
-        var sizeBox = new GameObject("Size", typeof(Image), typeof(LayoutElement));
-        sizeBox.transform.SetParent(row2, false);
-        sizeBox.GetComponent<Image>().color = new Color(0.16f, 0.16f, 0.18f);
-        var sbLe = sizeBox.GetComponent<LayoutElement>();
-        sbLe.minWidth = 140; sbLe.preferredWidth = 140; sbLe.preferredHeight = 125;
+        var sizeBox = new GameObject("Size", typeof(RectTransform));
+        sizeBox.transform.SetParent(stepper.transform, false);
+        UiKit.SetRect((RectTransform)sizeBox.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(150f, 94f));
         var dot = new GameObject("Dot", typeof(Image));
         dot.transform.SetParent(sizeBox.transform, false);
         var dotImg = dot.GetComponent<Image>();
         dotImg.sprite = UiKit.CircleSprite;
         dotImg.raycastTarget = false;
         _sizeDot = (RectTransform)dot.transform;
-        UiKit.SetRect(_sizeDot, new Vector2(0.5f, 0.6f), new Vector2(0.5f, 0.6f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40));
-        _sizeText = UiKit.MakeText(sizeBox.transform, "", 26, TextAnchor.LowerCenter, false);
-        UiKit.SetRect(_sizeText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(0, 4), Vector2.zero);
-
-        var plus = SizedButton(row2, "+", new Color(0.30f, 0.30f, 0.33f), 100);
+        UiKit.SetRect(_sizeDot, new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40));
+        _sizeText = UiKit.MakeText(sizeBox.transform, "", 22, TextAnchor.LowerCenter, false);
+        _sizeText.color = UiKit.TextDim;
+        UiKit.SetRect(_sizeText.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(0, 6), Vector2.zero);
+        var plus = StepperButton(stepper.transform, "+", 121f);
         plus.onClick.AddListener(() => { _worldRadius = Mathf.Clamp(_worldRadius + 0.01f, MinWorldRadius, MaxWorldRadius); });
 
-        var clear = SizedButton(row2, "CLEAR", new Color(0.55f, 0.20f, 0.20f), 150);
+        var clear = IconToolButton(barT, "CLEAR", "clear-x", UiKit.ClearRed, UiKit.Hex("FFD9D1"), 680f, rowY2, 160, 110, 44, 22);
         clear.onClick.AddListener(() => { _self.SkinClear(); });
 
-        var done = SizedButton(row2, "DONE", new Color(0.20f, 0.55f, 0.25f), 170);
+        var done = IconToolButton(barT, "DONE", "check", UiKit.Green, Color.white, 887f, rowY2, 230, 110, 48, 34, horizontal: true);
         done.onClick.AddListener(Exit);
 
         _swatch.color = _brush;
         UpdateSizeIndicator();
+        RefreshPaletteSelection();
     }
 
-    RectTransform MakeRow(Transform parent)
+    /// <summary>Place an element inside the toolbar: x from the bar's left edge,
+    /// y (negative) from the bar's top edge, both to the element's centre.</summary>
+    static void BarRect(RectTransform rt, float x, float y, float w, float h)
     {
-        var row = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-        row.transform.SetParent(parent, false);
-        var hlg = row.GetComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 12;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-        hlg.childControlWidth = true; hlg.childControlHeight = true;
-        hlg.childForceExpandWidth = false; hlg.childForceExpandHeight = false;
-        row.GetComponent<LayoutElement>().preferredHeight = 125;
-        return (RectTransform)row.transform;
+        UiKit.SetRect(rt, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f), new Vector2(x, y), new Vector2(w, h));
     }
 
-    Button SizedButton(Transform parent, string label, Color bg, float width, Color? fg = null)
+    /// <summary>Rounded tool tile with a silhouette icon + label (design 07 tools row).</summary>
+    Button IconToolButton(Transform parent, string label, string icon, Color bg, Color content,
+        float x, float y, float w, float h, float iconSize, int labelSize, bool horizontal = false)
     {
-        var b = UiKit.MakeButton(parent, label, bg, fg ?? Color.white, 42);
-        var le = b.gameObject.AddComponent<LayoutElement>();
-        le.minWidth = width; le.preferredWidth = width; le.preferredHeight = 125;
-        return b;
+        var go = new GameObject("Tool_" + label, typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var img = go.GetComponent<Image>();
+        img.sprite = UiKit.Shape("tile-round-12");
+        img.type = Image.Type.Sliced;
+        img.color = bg;
+        BarRect((RectTransform)go.transform, x, y, w, h);
+        var btn = go.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        go.AddComponent<PressFx>().target = img;
+        var ic = UiKit.MakeIconImage(go.transform, icon, content, iconSize);
+        var lbl = UiKit.MakeText(go.transform, label, labelSize, TextAnchor.MiddleCenter, false);
+        lbl.color = content;
+        if (horizontal)
+        {
+            ic.rectTransform.anchoredPosition = new Vector2(-w * 0.28f, 0f);
+            UiKit.SetRect(lbl.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(iconSize * 0.42f, 0f), Vector2.zero);
+        }
+        else
+        {
+            ic.rectTransform.anchoredPosition = new Vector2(0f, h * 0.12f);
+            UiKit.SetRect(lbl.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(0f, labelSize + 8f));
+        }
+        return btn;
+    }
+
+    Button StepperButton(Transform parent, string label, float x)
+    {
+        var go = new GameObject("Step" + label, typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var img = go.GetComponent<Image>();
+        img.sprite = UiKit.Shape("tile-round-12");
+        img.type = Image.Type.Sliced;
+        img.color = UiKit.Ink2;
+        UiKit.SetRect((RectTransform)go.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(x, 0f), new Vector2(90f, 94f));
+        var btn = go.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        go.AddComponent<PressFx>().target = img;
+        var t = UiKit.MakeText(go.transform, label, 52, TextAnchor.MiddleCenter, false);
+        UiKit.SetRect(t.rectTransform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        return btn;
     }
 }

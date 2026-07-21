@@ -212,12 +212,16 @@ public static class UiShotDirector
                 Step(8);
                 break;
 
-            case 8: // catch the hunter reveal banner
-                var banner = GetPrivate<Text>(_mm, "_banner");
-                if (banner != null && banner.text.EndsWith("HUNTER!"))
+            case 8: // catch the hunter reveal: plate up, pick frozen, flash+shake settled
+                var revealRoot = GetPrivate<GameObject>(_mm, "_revealRoot");
+                var revealFoot = GetPrivate<Text>(_mm, "_revealFoot");
+                var revealName = GetPrivate<Text>(_mm, "_revealName");
+                if (revealRoot != null && revealRoot.activeSelf
+                    && revealFoot != null && !string.IsNullOrEmpty(revealFoot.text)
+                    && revealName != null && revealName.transform.localScale.x < 1.005f)
                 {
                     Shot("02-hunter-reveal.png");
-                    Status("step8: reveal captured (" + banner.text + ")");
+                    Status("step8: reveal captured");
                     Step(9);
                 }
                 else if (_mm.Phase == MatchPhase.Hide || _mm.Phase == MatchPhase.Travel)
@@ -253,10 +257,9 @@ public static class UiShotDirector
                 Step(11);
                 break;
 
-            case 11: // pose panel open
+            case 11: // pose panel open (via the toggle so the dim + highlight come along)
                 if (!Waited(1.8f)) return;
-                var panel = GetPrivate<GameObject>(_rig, "_posePanel");
-                if (panel != null) panel.SetActive(true);
+                InvokePrivate(_rig, "TogglePosePanel");
                 Step(12);
                 break;
 
@@ -269,7 +272,7 @@ public static class UiShotDirector
             case 13: // close panel, enter paint mode
                 if (!Waited(3.0f)) return;
                 var panel2 = GetPrivate<GameObject>(_rig, "_posePanel");
-                if (panel2 != null) panel2.SetActive(false);
+                if (panel2 != null && panel2.activeSelf) InvokePrivate(_rig, "TogglePosePanel");
                 InvokePrivate(_rig, "OnAction");
                 Status("step13: paint mode entered");
                 Step(14);
@@ -356,8 +359,8 @@ public static class UiShotDirector
                 Step(26);
                 break;
 
-            case 26:
-                if (!Waited(1.0f)) return;
+            case 26: // let the resultB entrance sequence finish before shooting
+                if (!Waited(1.5f)) return;
                 Shot("10-result.png");
                 Step(27);
                 break;

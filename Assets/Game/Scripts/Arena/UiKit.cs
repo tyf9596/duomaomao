@@ -223,7 +223,9 @@ public static class UiKit
         for (int i = 0; i < n; i++)
         {
             var seg = MakeImage(root.transform, null, Rainbow[i], "seg" + i);
-            SetRect(seg.rectTransform, new Vector2(i / (float)n, 0f), new Vector2((i + 1) / (float)n, 1f),
+            // tiny overlap so anti-aliased seams between segments never show
+            SetRect(seg.rectTransform, new Vector2(i / (float)n, 0f),
+                new Vector2(Mathf.Min(1f, (i + 1) / (float)n + 0.006f), 1f),
                 new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         }
         rt.sizeDelta = new Vector2(0f, height);
@@ -316,6 +318,76 @@ public static class UiKit
         rt.pivot = pivot;
         rt.anchoredPosition = anchoredPos;
         rt.sizeDelta = sizeDelta;
+    }
+
+    // ---------------- easing + micro-tweens (spec section 5; code-driven, no assets) ----------------
+
+    public static float EaseOutCubic(float t) { t = Mathf.Clamp01(t); return 1f - (1f - t) * (1f - t) * (1f - t); }
+
+    public static float EaseOutBack(float t)
+    {
+        t = Mathf.Clamp01(t);
+        const float c1 = 1.70158f, c3 = c1 + 1f;
+        float u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
+    }
+
+    public static CanvasGroup EnsureGroup(GameObject go)
+    {
+        var g = go.GetComponent<CanvasGroup>();
+        return g != null ? g : go.AddComponent<CanvasGroup>();
+    }
+
+    /// <summary>Pop-in: fade + scale toward 1 with a soft overshoot.</summary>
+    public static System.Collections.IEnumerator PopIn(RectTransform rt, float fromScale, float dur)
+    {
+        var g = EnsureGroup(rt.gameObject);
+        float t = 0f;
+        while (t < dur && rt != null)
+        {
+            t += Time.deltaTime;
+            float k = EaseOutBack(t / dur);
+            float s = Mathf.LerpUnclamped(fromScale, 1f, k);
+            rt.localScale = new Vector3(s, s, 1f);
+            g.alpha = EaseOutCubic(t / dur * 1.6f);
+            yield return null;
+        }
+        if (rt != null) { rt.localScale = Vector3.one; g.alpha = 1f; }
+    }
+
+    /// <summary>Slide from an offset back to the layout position, with fade.</summary>
+    public static System.Collections.IEnumerator SlideIn(RectTransform rt, Vector2 fromOffset, float dur)
+    {
+        var g = EnsureGroup(rt.gameObject);
+        Vector2 basePos = rt.anchoredPosition;
+        float t = 0f;
+        while (t < dur && rt != null)
+        {
+            t += Time.deltaTime;
+            float k = EaseOutCubic(t / dur);
+            rt.anchoredPosition = basePos + Vector2.LerpUnclamped(fromOffset, Vector2.zero, k);
+            g.alpha = k;
+            yield return null;
+        }
+        if (rt != null) { rt.anchoredPosition = basePos; g.alpha = 1f; }
+    }
+
+    /// <summary>Fade a CanvasGroup to a target alpha; optionally deactivate at 0.</summary>
+    public static System.Collections.IEnumerator Fade(CanvasGroup g, float to, float dur, bool deactivateAtZero = false)
+    {
+        float from = g != null ? g.alpha : 0f;
+        float t = 0f;
+        while (t < dur && g != null)
+        {
+            t += Time.deltaTime;
+            g.alpha = Mathf.Lerp(from, to, t / dur);
+            yield return null;
+        }
+        if (g != null)
+        {
+            g.alpha = to;
+            if (deactivateAtZero && to <= 0f) g.gameObject.SetActive(false);
+        }
     }
 }
 

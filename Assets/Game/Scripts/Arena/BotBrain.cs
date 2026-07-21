@@ -202,6 +202,9 @@ public class BotBrain : MonoBehaviour
 
     void HuntBehavior()
     {
+        // poses persist through movement now — a hunter must never stalk in a lobby pose
+        if (self.motor.CurrentPose != Pose.Stand) self.motor.SetPose(Pose.Stand);
+
         if (Time.time >= _scanAt)
         {
             _scanAt = Time.time + 0.2f;

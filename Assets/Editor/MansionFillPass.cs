@@ -508,6 +508,56 @@ public static class MansionFillPass
         Cyl("FloorSplat", c, r, 0.012f, new Vector3(0, Random.Range(0, 360f), 0), M("SplatMural"));
     }
 
+    // ---------------------------------------------------------------- runtime verification
+    // (execute_code is dead; these run in play mode via execute_menu_item and Debug.Log)
+
+    [MenuItem("Tools/Mansion/V0 Run In Background")]
+    public static void RunInBackground()
+    {
+        // two Unity editors fight over OS focus when multiple agents test at once;
+        // with runInBackground the play loop no longer needs focus at all
+        Application.runInBackground = true;
+        PlayerSettings.runInBackground = true;
+        Debug.Log("[MansionFill] V0 runInBackground=ON");
+    }
+
+    [MenuItem("Tools/Mansion/V1 Log Character Sizes")]
+    public static void VerifySizes()
+    {
+        var mm = Object.FindFirstObjectByType<MatchManager>();
+        if (mm == null) { Debug.Log("[MansionFill] V1: no MatchManager (not playing?)"); return; }
+        foreach (var ch in mm.Characters)
+        {
+            if (ch == null) continue;
+            var cc = ch.GetComponent<CharacterController>();
+            Debug.Log(string.Format("[MansionFill] V1 {0} team={1} bodyScale={2:F2} ccH={3:F2} pose={4} y={5:F1}",
+                ch.displayName, ch.team, ch.bodyScale, cc != null ? cc.height : -1f, ch.motor.CurrentPose, ch.transform.position.y));
+        }
+        foreach (var d in Object.FindObjectsByType<DecoyStatue>(FindObjectsSortMode.None))
+        {
+            var body = d.transform.Find("Body");
+            Debug.Log("[MansionFill] V1 decoy " + d.pose + " bodyScale=" + (body != null ? body.localScale.x * d.transform.lossyScale.x : -1f));
+        }
+    }
+
+    [MenuItem("Tools/Mansion/V2 Poke Posed Bot Walk")]
+    public static void PokePosedBot()
+    {
+        var mm = Object.FindFirstObjectByType<MatchManager>();
+        if (mm == null) { Debug.Log("[MansionFill] V2: not playing"); return; }
+        foreach (var ch in mm.Characters)
+        {
+            if (ch == null || ch.isPlayer || ch.team != Team.Hider) continue;
+            var brain = ch.GetComponent<BotBrain>();
+            if (brain != null) brain.enabled = false;
+            ch.motor.SetPose(Pose.Crouch);
+            var w = ch.gameObject.AddComponent<EditorPoseWalker>();
+            w.motor = ch.motor;
+            Debug.Log("[MansionFill] V2 poking " + ch.displayName + " — crouch-walking 3s");
+            return;
+        }
+    }
+
     // ---------------------------------------------------------------- 3: Arena05 monument
 
     [MenuItem("Tools/Mansion/3 Rescale Monument Markers (Arena05)")]
@@ -530,5 +580,29 @@ public static class MansionFillPass
         SaveActive();
         Debug.Log("[MansionFill] monument markers rescaled: " + n);
         EditorSceneManager.OpenScene(Arena06Path);
+    }
+}
+
+/// <summary>Editor-only play-mode helper: drives a posed bot for 3 seconds to prove the
+/// pose persists through movement, then reports PASS/FAIL and removes itself.</summary>
+public class EditorPoseWalker : MonoBehaviour
+{
+    public CharacterMotor motor;
+    float _until;
+    Pose _startPose;
+
+    void Start() { _until = Time.time + 3f; _startPose = motor != null ? motor.CurrentPose : Pose.Stand; }
+
+    void Update()
+    {
+        if (motor == null) { Destroy(this); return; }
+        motor.desiredMove = new Vector3(0.7f, 0f, 0.2f);
+        if (Time.time >= _until)
+        {
+            bool pass = motor.CurrentPose == _startPose;
+            Debug.Log("[MansionFill] V2 pose-persist: start=" + _startPose + " after3sWalk=" + motor.CurrentPose + " => " + (pass ? "PASS" : "FAIL"));
+            motor.desiredMove = Vector3.zero;
+            Destroy(this);
+        }
     }
 }

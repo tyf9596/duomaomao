@@ -1,0 +1,27 @@
+19:43:45  armed via file - waiting for play mode
+19:43:45  autoplay - entering play mode
+19:44:01  step0: managers found, lobby accelerated
+19:47:40  step1: room full
+19:47:45  captured 01-lobby.png
+19:47:46  step3: hider loading screen up
+19:47:48  captured 03-travel-hider.png
+19:47:55  step5: hunter loading screen up
+19:47:58  captured 04-travel-hunter.png
+19:48:05  step7: lobby countdown cut
+19:48:14  captured 02-hunter-reveal.png
+19:48:14  step8: reveal captured
+19:48:19  step9: hide phase, player is hider
+19:48:20  captured 05-hide-controls.png
+19:48:21  captured 06-pose-panel.png
+19:48:22  step13: paint mode entered
+19:48:24  captured 07-paint-mode.png
+19:48:25  step16: hide cut, waiting for hunter travel
+19:48:27  captured 11-hunter-incoming.png
+19:48:27  step18: hunter incoming captured
+19:48:29  step19: seek phase
+19:48:30  captured 08-seek-hider.png
+19:48:31  step22: player converted to hunter
+19:48:33  captured 09-seek-hunter-fps.png
+19:48:34  step24: converted 8 hiders to end the match
+19:48:35  captured 10-result.png
+19:48:36  DONE
