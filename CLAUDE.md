@@ -296,8 +296,13 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
  -r:"$(cygpath -w "$U/Managed/UnityEngine/UnityEngine.AnimationModule.dll")" \
  -r:"Library\ScriptAssemblies\UnityEngine.UI.dll" \
  -r:"Library\ScriptAssemblies\Unity.InputSystem.dll" \
- Assets/Game/Scripts/Game/*.cs Assets/Game/Scripts/Arena/*.cs
+ -r:"Library\ScriptAssemblies\Unity.Netcode.Runtime.dll" \
+ -r:"Library\ScriptAssemblies\Unity.Collections.dll" \
+ -r:"Library\ScriptAssemblies\Unity.Networking.Transport.dll" \
+ Assets/Game/Scripts/Game/*.cs Assets/Game/Scripts/Arena/*.cs Assets/Game/Scripts/Arena/Net/*.cs
 ```
+(netcode refs + `Net/*.cs` required since 2026-07-21's net bridge; add `-nowarn:0618`
+to mute NGO's RequireOwnership deprecation warnings if noise bothers you)
 
 ## Verified E2E (2026-07-14, play mode via MCP)
 
