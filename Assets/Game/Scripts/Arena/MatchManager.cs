@@ -302,6 +302,7 @@ public class MatchManager : MonoBehaviour
     {
         switch (SceneManager.GetActiveScene().name)
         {
+            case "Arena07": return "SUGAR LAND";
             case "Arena06": return "THE MANSION";
             case "Arena05": return "THE NEIGHBORHOOD";
             case "Arena04": return "TWIN HOUSES";

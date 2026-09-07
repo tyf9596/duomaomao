@@ -366,6 +366,20 @@ U="C:/Program Files/Unity/Hub/Editor/6000.0.77f1/Editor/Data"
 (netcode refs + `Net/*.cs` required since 2026-07-21's net bridge; add `-nowarn:0618`
 to mute NGO's RequireOwnership deprecation warnings if noise bothers you)
 
+To also compile the EDITOR scripts (`Assets/Editor/*.cs Assets/Game/Scripts/Editor/*.cs`),
+append them to the source list and add these refs — the trick is the TYPE-FORWARDING
+facade `Managed/UnityEngine/UnityEngine.dll` (NOT the monolithic `Managed/UnityEngine.dll`,
+which redefines types and explodes in CS0433 against the module dlls):
+```
+ -r:"$(cygpath -w "$U/Managed/UnityEngine/UnityEngine.dll")" \
+ -r:"$(cygpath -w "$U/Managed/UnityEditor.dll")" \
+ -r:"$(cygpath -w "$U/Managed/UnityEngine/UnityEngine.ImageConversionModule.dll")" \
+ -r:"$(cygpath -w "$U/Managed/UnityEngine/UnityEngine.ScreenCaptureModule.dll")" \
+ -r:"$(cygpath -w "$U/Managed/UnityEngine/UnityEngine.AudioModule.dll")" \
+```
+(verified 2026-09-07 — caught that SugarLandBuilder.cs had never been compiled by the
+editor at all: Unity's `Assembly-CSharp-Editor.dll` predated the source file)
+
 ## Verified E2E (2026-07-14, play mode via MCP)
 
 - Diorama02: full loop — spawn → random roles → bots hide/camo/pose → hunter suspicion →
